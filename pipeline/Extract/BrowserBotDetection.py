@@ -1,11 +1,3 @@
-"""
-Browser-render fallback, used only when curl_bot_detection fails (bot
-challenge, JS-gated content). Most India news sites won't need this.
-
-NOTE: needs crawl4ai + playwright installed, not available in this sandbox,
-so this file is untested here. Verify locally.
-"""
-
 import asyncio
 
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig

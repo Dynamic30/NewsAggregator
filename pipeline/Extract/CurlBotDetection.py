@@ -1,12 +1,3 @@
-"""
-Fast, non-browser page fetch with curl_cffi TLS impersonation + bot-check /
-paywall detection. First line of defense before falling back to a browser.
-
-Returns (html, status, problem). problem is None when the page is usable;
-otherwise a short reason content.py uses to decide whether to fall back to
-browser_bot_detection.
-"""
-
 import re
 from urllib.parse import urljoin
 
