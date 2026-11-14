@@ -1,7 +1,8 @@
 from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Boolean, DateTime, Enum, Text, func
+from sqlalchemy import BigInteger, Boolean, DateTime, Enum, ForeignKey, Text, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database_connetion import Base
@@ -50,6 +51,17 @@ class NewsArticle(Base):
     ingested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     extracted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     enriched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class StoryCluster(Base):
+    __tablename__ = "story_cluster"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    article_topic: Mapped[str] = mapped_column(article_topic_enum, nullable=False)
+    representative_article_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("news_article.id"), nullable=False)
+    member_article_ids: Mapped[list[int]] = mapped_column(JSONB, nullable=False)
+    published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
 class SourceProfile(Base):

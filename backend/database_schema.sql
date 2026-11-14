@@ -57,3 +57,14 @@ CREATE TABLE IF NOT EXISTS news_article (
 
 CREATE INDEX IF NOT EXISTS idx_news_article_published_at ON news_article (published_at DESC);
 CREATE INDEX IF NOT EXISTS idx_news_article_source ON news_article (source);
+
+CREATE TABLE IF NOT EXISTS story_cluster (
+    id                         BIGSERIAL PRIMARY KEY,
+    article_topic              article_topic_enum NOT NULL,
+    representative_article_id  BIGINT NOT NULL REFERENCES news_article(id),
+    member_article_ids         JSONB NOT NULL,
+    published_at                TIMESTAMPTZ NOT NULL,
+    updated_at                  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_story_cluster_topic_published ON story_cluster (article_topic, published_at DESC);

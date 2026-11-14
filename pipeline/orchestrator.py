@@ -5,9 +5,10 @@ import requests
 from sqlalchemy import func, update
 from sqlalchemy.dialects.postgresql import insert as postgres_insert
 
-from database_connection import NewsArticle, SessionLocal
+from database_connection import NewsArticle, get_db
 from Extract import Content
 from Ingest import BusinessStandard, EconomicTimes, GoogleNews, LiveMint, NDTV, TheHindu, TimesOfIndia
+from story_clustering import cluster_newly_embedded_articles
 from dotenv import load_dotenv
 import os
 load_dotenv()
@@ -26,7 +27,8 @@ SOURCE_FETCHERS = {
 }
 
 OLLAMA_EMBED_URL = os.getenv("OLLAMA_EMBED_URL")
-TITLE_EMBEDDING_MODEL = "nomic-embed-text"
+EMBEDDING_MODEL = "nomic-embed-text"
+EMBEDDING_MARKDOWN_CHAR_LIMIT = 4000
 
 Topics = {
     "National/India": {
@@ -117,7 +119,11 @@ def parse_published_date(raw_published_date):
 
 class DATABASE_PUSH:
     def __init__(self):
-        self.session = SessionLocal()
+        self._db_gen = get_db()
+        self.session = next(self._db_gen)
+
+    def close(self):
+        self._db_gen.close()
 
     def save_ingested_articles(self, articles, topic):
         if not articles:
@@ -161,8 +167,8 @@ class DATABASE_PUSH:
                 self.session.rollback()
                 print(f"[database_push] failed to save extracted markdown for {result['url']}: {error}")
 
-    def save_title_embeddings(self, embedded_titles):
-        for article_url, embedding in embedded_titles:
+    def save_embeddings(self, embedded_articles):
+        for article_url, embedding in embedded_articles:
             try:
                 self.session.execute(
                     update(NewsArticle)
@@ -199,8 +205,8 @@ async def run_extract(url):
     return await asyncio.to_thread(Content.extract_filtered_markdown, url)
 
 
-def run_enrich(title):
-    response = requests.post(OLLAMA_EMBED_URL, json={"model": TITLE_EMBEDDING_MODEL, "input": title})
+def run_enrich(text):
+    response = requests.post(OLLAMA_EMBED_URL, json={"model": EMBEDDING_MODEL, "input": text})
     response.raise_for_status()
     return response.json()["embeddings"][0]
 
@@ -228,8 +234,8 @@ async def main(Topics):
             database_push.save_ingested_articles(result, topic)
             batch_articles.extend(result)
 
-        title_by_url = {article["url"]: article["title"] for article in batch_articles}
-        urls_to_extract = list(title_by_url.keys())
+        article_by_url = {article["url"]: article for article in batch_articles}
+        urls_to_extract = list(article_by_url.keys())
 
         extract_results = await asyncio.gather(
             *(run_extract(url) for url in urls_to_extract), return_exceptions=True
@@ -237,16 +243,23 @@ async def main(Topics):
         successful_extractions = [result for result in extract_results if not isinstance(result, Exception)]
         database_push.save_extracted_markdown(successful_extractions)
 
-        embedded_titles = []
+        embedded_articles = []
         for result in successful_extractions:
             if not result["markdown"]:
                 continue
             try:
-                embedding = run_enrich(title_by_url[result["url"]])
-                embedded_titles.append((result["url"], embedding))
+                article = article_by_url[result["url"]]
+                embedding_text = "\n\n".join([
+                    article["title"],
+                    article.get("description") or "",
+                    result["markdown"][:EMBEDDING_MARKDOWN_CHAR_LIMIT],
+                ])
+                embedding = run_enrich(embedding_text)
+                embedded_articles.append((result["url"], embedding))
             except Exception as error:
                 print(f"[main] enrich failed for {result['url']}: {error}")
-        database_push.save_title_embeddings(embedded_titles)
+        database_push.save_embeddings(embedded_articles)
+        cluster_newly_embedded_articles(database_push.session, [url for url, _ in embedded_articles])
 
         for result in successful_extractions:
             if not result["markdown"]:
@@ -255,6 +268,8 @@ async def main(Topics):
                 run_political_lean(result)
             except Exception as error:
                 print(f"[main] political lean failed for {result['url']}: {error}")
+
+    database_push.close()
 
 
 if __name__ == "__main__":
