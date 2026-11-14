@@ -5,7 +5,7 @@ import os
 
 load_dotenv()
 
-news_db = os.getenv("news_db")
+news_db = os.getenv("DATABASE")
 
 engine = create_engine(news_db)
 

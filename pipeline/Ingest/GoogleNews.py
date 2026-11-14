@@ -1,32 +1,45 @@
 import asyncio
 from urllib.parse import quote
- 
+
 from bs4 import BeautifulSoup
 from curl_cffi.requests import AsyncSession
 from googlenewsdecoder import gnewsdecoder
+
+DECODE_CONCURRENCY_LIMIT = 10
+
+
+async def decode_google_news_url(gnews_url, decode_semaphore):
+    if not gnews_url:
+        return None
+    async with decode_semaphore:
+        decoded = await asyncio.to_thread(gnewsdecoder, gnews_url)
+    return decoded["decoded_url"] if decoded and decoded.get("success") else gnews_url
 
 
 async def fetch_google_news(topic: str, lang: str = "en", country: str = "IN") -> list[dict]:
     hl = f"{lang}-{country}"
     ceid = f"{country}:{lang}"
     url = f"https://news.google.com/rss/search?q={quote(topic)}&hl={hl}&gl={country}&ceid={ceid}"
- 
+
     async with AsyncSession() as session:
         resp = await session.get(url, impersonate="chrome110")
         resp.raise_for_status()
- 
+
     soup = BeautifulSoup(resp.content, "xml")
+    items = soup.find_all("item")
+    gnews_urls = [item.find("link").get_text(strip=True) if item.find("link") else None for item in items]
+
+    decode_semaphore = asyncio.Semaphore(DECODE_CONCURRENCY_LIMIT)
+    decoded_urls = await asyncio.gather(
+        *(decode_google_news_url(gnews_url, decode_semaphore) for gnews_url in gnews_urls)
+    )
+
     results = []
-    for item in soup.find_all("item"):
+    for item, article_url in zip(items, decoded_urls):
         title_tag = item.find("title")
-        link_tag = item.find("link")
         pubdate_tag = item.find("pubDate")
         desc_tag = item.find("description")
         source_tag = item.find("source")
-
-        gnews_url = link_tag.get_text(strip=True) if link_tag else None
-        decoded = gnewsdecoder(gnews_url) if gnews_url else None
-        article_url = decoded["decoded_url"] if decoded and decoded.get("success") else gnews_url
 
         results.append({
             "title": title_tag.get_text(strip=True) if title_tag else None,
