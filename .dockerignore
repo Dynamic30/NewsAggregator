@@ -1,0 +1,11 @@
+.git
+.vscode
+.claude
+backend
+frontend
+docker-compose*.yml
+*.md
+__pycache__
+*.pyc
+.env
+.env.example

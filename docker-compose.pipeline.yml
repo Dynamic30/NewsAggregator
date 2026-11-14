@@ -1,0 +1,12 @@
+services:
+  pipeline-scheduler:
+    build:
+      context: .
+      dockerfile: pipeline_automation/Dockerfile
+    container_name: pipeline-scheduler
+    env_file: .env
+    environment:
+      - OLLAMA_EMBED_URL=${OLLAMA_EMBED_URL_CONTAINER}
+      - ORCHESTRATOR_CRON_SCHEDULE=0 0 * * *
+      - RETENTION_CRON_SCHEDULE=0 0 * * *
+    restart: unless-stopped

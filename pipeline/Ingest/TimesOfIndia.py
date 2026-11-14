@@ -29,7 +29,8 @@ async def fetch_toi(feed_path: str) -> list[dict]:
         link_tag = item.find("link")
         pubdate_tag = item.find("pubDate")
         desc_tag = item.find("description")
- 
+        enclosure_tag = item.find("enclosure")
+
         article_url = link_tag.get_text(strip=True) if link_tag else None
         results.append({
             "title": title_tag.get_text(strip=True) if title_tag else None,
@@ -37,6 +38,7 @@ async def fetch_toi(feed_path: str) -> list[dict]:
             "published_date": pubdate_tag.get_text(strip=True) if pubdate_tag else None,
             "description": desc_tag.get_text(strip=True) if desc_tag else None,
             "source": source_from_url(article_url),
+            "image_url": enclosure_tag.get("url") if enclosure_tag else None,
         })
     return results
  

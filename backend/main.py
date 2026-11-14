@@ -2,12 +2,13 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from contextlib import asynccontextmanager
+from database_connetion import setup_database_schema
 from settings import redis_cache, redis_rate_limiter
 
 
 @asynccontextmanager
 async def lifespan(app:FastAPI):
-    # add redis (cache + rate limiter) and db conn + table set up here
+    setup_database_schema()
 
     yield
     await redis_cache.aclose()

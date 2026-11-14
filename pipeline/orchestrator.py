@@ -55,17 +55,12 @@ Topics = {
         "EconomicTimes": "tech/rssfeeds/13357270.cms",
     },
     "Sports": {
-        "GoogleNews": "India sports",
-        "TimesOfIndia": "rssfeeds/4719148.cms",
+        "GoogleNews": ["India sports", "India cricket"],
+        "TimesOfIndia": ["rssfeeds/4719148.cms", "rssfeeds/54829575.cms"],
+        "NDTV": "https://sports.ndtv.com/rss/cricket",
         "TheHindu": "sport",
         "LiveMint": "sports",
         "EconomicTimes": "news/sports/rssfeeds/26407562.cms",
-    },
-    "Cricket": {
-        "GoogleNews": "India cricket",
-        "TimesOfIndia": "rssfeeds/54829575.cms",
-        "NDTV": "https://sports.ndtv.com/rss/cricket",
-        "TheHindu": "sport/cricket",
     },
     "Entertainment": {
         "GoogleNews": "India entertainment bollywood",
@@ -135,6 +130,7 @@ class DATABASE_PUSH:
                 "source": article["source"],
                 "article_topic": topic,
                 "published_at": parse_published_date(article.get("published_date")),
+                "image_url": article.get("image_url"),
             }
             for article in articles
         ]
@@ -156,6 +152,7 @@ class DATABASE_PUSH:
                         markdown=result["markdown"],
                         extract_status=result["status"].value,
                         used_browser=result["used_browser_fallback"],
+                        image_url=func.coalesce(NewsArticle.image_url, result["image_url"]),
                         extracted_at=func.now(),
                     )
                 )
@@ -258,3 +255,7 @@ async def main(Topics):
                 run_political_lean(result)
             except Exception as error:
                 print(f"[main] political lean failed for {result['url']}: {error}")
+
+
+if __name__ == "__main__":
+    asyncio.run(main(Topics))

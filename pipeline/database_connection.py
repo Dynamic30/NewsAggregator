@@ -22,7 +22,6 @@ ARTICLE_TOPICS = (
     "Business/Economy",
     "Technology",
     "Sports",
-    "Cricket",
     "Entertainment",
     "Science & Health",
     "Education",
@@ -43,6 +42,7 @@ class NewsArticle(Base):
     source: Mapped[str] = mapped_column(Text, nullable=False)
     article_topic: Mapped[str | None] = mapped_column(article_topic_enum)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    image_url: Mapped[str | None] = mapped_column(Text)
 
     markdown: Mapped[str | None] = mapped_column(Text)
     extract_status: Mapped[str] = mapped_column(Text, nullable=False, default="pending")

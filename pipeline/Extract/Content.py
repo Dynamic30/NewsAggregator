@@ -1,6 +1,7 @@
 from enum import Enum
 
 import trafilatura
+from bs4 import BeautifulSoup
 
 from Extract import CurlBotDetection, BrowserBotDetection
 
@@ -51,20 +52,29 @@ class HELPER:
         is_likely_paywall_stub = len(markdown.split()) < MIN_WORD_COUNT_FOR_FULL_ARTICLE
         return markdown, is_likely_paywall_stub
 
+    @staticmethod
+    def extract_og_image(html: str) -> str | None:
+        soup = BeautifulSoup(html, "html.parser")
+        og_image_tag = soup.find("meta", property="og:image")
+        if og_image_tag and og_image_tag.get("content"):
+            return og_image_tag["content"]
+        twitter_image_tag = soup.find("meta", attrs={"name": "twitter:image"})
+        return twitter_image_tag["content"] if twitter_image_tag and twitter_image_tag.get("content") else None
+
 
 def extract_filtered_markdown(url: str) -> dict:
     html, problem, used_browser_fallback = HELPER.fetch_html(url)
 
     if problem and problem.startswith("page not found"):
-        return {"url": url, "markdown": None, "status": ExtractionStatus.ERROR, "used_browser_fallback": used_browser_fallback}
+        return {"url": url, "markdown": None, "status": ExtractionStatus.ERROR, "used_browser_fallback": used_browser_fallback, "image_url": None}
 
     if problem and problem.startswith(("blocked", "could not reach", "too many redirects", "status")):
-        return {"url": url, "markdown": None, "status": ExtractionStatus.BLOCKED, "used_browser_fallback": used_browser_fallback}
+        return {"url": url, "markdown": None, "status": ExtractionStatus.BLOCKED, "used_browser_fallback": used_browser_fallback, "image_url": None}
 
     markdown, is_likely_paywall_stub = HELPER.convert_html_to_markdown(html, url)
 
     if markdown is None:
-        return {"url": url, "markdown": None, "status": ExtractionStatus.ERROR, "used_browser_fallback": used_browser_fallback}
+        return {"url": url, "markdown": None, "status": ExtractionStatus.ERROR, "used_browser_fallback": used_browser_fallback, "image_url": None}
 
     is_paywalled = bool(problem and problem.startswith("paywalled")) or is_likely_paywall_stub
     return {
@@ -72,6 +82,7 @@ def extract_filtered_markdown(url: str) -> dict:
         "markdown": markdown,
         "status": ExtractionStatus.PAYWALLED if is_paywalled else ExtractionStatus.OK,
         "used_browser_fallback": used_browser_fallback,
+        "image_url": HELPER.extract_og_image(html),
     }
 
 

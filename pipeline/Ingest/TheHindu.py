@@ -31,7 +31,8 @@ async def fetch_the_hindu(section: str) -> list[dict]:
         link_tag = item.find("link")
         pubdate_tag = item.find("pubDate")
         desc_tag = item.find("description")
- 
+        media_content_tag = item.find("media:content")
+
         article_url = link_tag.get_text(strip=True) if link_tag else None
         results.append({
             "title": title_tag.get_text(strip=True) if title_tag else None,
@@ -39,6 +40,7 @@ async def fetch_the_hindu(section: str) -> list[dict]:
             "published_date": pubdate_tag.get_text(strip=True) if pubdate_tag else None,
             "description": desc_tag.get_text(strip=True) if desc_tag else None,
             "source": source_from_url(article_url),
+            "image_url": media_content_tag.get("url") if media_content_tag else None,
         })
     return results
  
