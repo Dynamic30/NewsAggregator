@@ -1,3 +1,5 @@
+CREATE EXTENSION IF NOT EXISTS vector;
+
 DO $$ BEGIN
     CREATE TYPE article_topic_enum AS ENUM (
         'National/India',
@@ -68,3 +70,7 @@ CREATE TABLE IF NOT EXISTS story_cluster (
 );
 
 CREATE INDEX IF NOT EXISTS idx_story_cluster_topic_published ON story_cluster (article_topic, published_at DESC);
+CREATE INDEX IF NOT EXISTS idx_story_cluster_members ON story_cluster USING GIN (member_article_ids);
+
+ALTER TABLE news_article ADD COLUMN IF NOT EXISTS lean_breakdown JSONB;
+ALTER TABLE story_cluster ADD COLUMN IF NOT EXISTS lean_summary TEXT;

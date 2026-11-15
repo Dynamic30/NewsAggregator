@@ -2,12 +2,14 @@ import asyncio
 from email.utils import parsedate_to_datetime
 
 import requests
-from sqlalchemy import func, update
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as postgres_insert
 
-from database_connection import NewsArticle, get_db
+from clean_article import clean_description, clean_source, clean_title
+from database_connection import NewsArticle, StoryCluster, get_db
 from Extract import Content
 from Ingest import BusinessStandard, EconomicTimes, GoogleNews, LiveMint, NDTV, TheHindu, TimesOfIndia
+from PoliticalLeanModel.lean_scoring import llm_main
 from story_clustering import cluster_newly_embedded_articles
 from dotenv import load_dotenv
 import os
@@ -15,6 +17,8 @@ load_dotenv()
 
 
 TOPIC_BATCH_SIZE = 5
+
+NON_POLITICAL_TOPICS = ("Sports", "Entertainment", "Markets/Stocks")
 
 SOURCE_FETCHERS = {
     "GoogleNews": GoogleNews.fetch_google_news,
@@ -131,9 +135,9 @@ class DATABASE_PUSH:
         rows = [
             {
                 "url": article["url"],
-                "title": article["title"],
-                "description": article.get("description"),
-                "source": article["source"],
+                "title": clean_title(article["title"], article["source"]),
+                "description": clean_description(article.get("description")),
+                "source": clean_source(article["source"]),
                 "article_topic": topic,
                 "published_at": parse_published_date(article.get("published_date")),
                 "image_url": article.get("image_url"),
@@ -147,6 +151,21 @@ class DATABASE_PUSH:
         except Exception as error:
             self.session.rollback()
             print(f"[database_push] failed to save ingested articles for topic {topic}: {error}")
+
+    def get_pending_urls(self, urls):
+        return self.session.execute(
+            select(NewsArticle.url).where(NewsArticle.url.in_(urls), NewsArticle.extract_status == "pending")
+        ).scalars().all()
+
+    def get_unembedded_articles(self):
+        return self.session.execute(
+            select(
+                NewsArticle.url,
+                NewsArticle.title,
+                NewsArticle.description,
+                func.left(NewsArticle.markdown, EMBEDDING_MARKDOWN_CHAR_LIMIT),
+            ).where(NewsArticle.markdown.is_not(None), NewsArticle.markdown != "", NewsArticle.embedding.is_(None))
+        ).all()
 
     def save_extracted_markdown(self, extract_results):
         for result in extract_results:
@@ -180,6 +199,43 @@ class DATABASE_PUSH:
                 self.session.rollback()
                 print(f"[database_push] failed to save embedding for {article_url}: {error}")
 
+    def get_clusters_to_score(self):
+        unscored_member = (
+            select(NewsArticle.id)
+            .where(
+                NewsArticle.political_lean_score.is_(None),
+                StoryCluster.member_article_ids.contains(func.to_jsonb(NewsArticle.id)),
+            )
+            .exists()
+        )
+        clusters = self.session.execute(
+            select(StoryCluster).where(StoryCluster.article_topic.not_in(NON_POLITICAL_TOPICS), unscored_member)
+        ).scalars().all()
+        return [
+            (cluster, self.session.execute(select(NewsArticle).where(NewsArticle.id.in_(cluster.member_article_ids))).scalars().all())
+            for cluster in clusters
+        ]
+
+    def save_lean_results(self, cluster, result):
+        try:
+            for article_id, lean in result["scores"].items():
+                self.session.execute(
+                    update(NewsArticle)
+                    .where(NewsArticle.id == article_id)
+                    .values(
+                        political_lean=lean["political_lean"],
+                        political_lean_score=lean["score"],
+                        lean_confidence=lean["confidence"],
+                        lean_breakdown=lean["breakdown"],
+                    )
+                )
+            cluster.lean_summary = result["cluster_summary"]
+            cluster.representative_article_id = result["representative_article_id"]
+            self.session.commit()
+        except Exception as error:
+            self.session.rollback()
+            print(f"[database_push] failed to save lean results for cluster {cluster.id}: {error}")
+
 
 async def run_ingest(topic, region="IN"):
     sources_for_topic = Topics.get(topic, {})
@@ -211,8 +267,21 @@ def run_enrich(text):
     return response.json()["embeddings"][0]
 
 
-def run_political_lean(article):
-    pass
+def run_political_lean(database_push):
+    if not os.getenv("LLM_MODEL"):
+        print("[main] political lean skipped: LLM_MODEL not set")
+        return
+
+    for cluster, articles in database_push.get_clusters_to_score():
+        try:
+            result = llm_main([
+                {"id": article.id, "title": article.title, "description": article.description, "markdown": article.markdown}
+                for article in articles
+            ])
+            if result:
+                database_push.save_lean_results(cluster, result)
+        except Exception as error:
+            print(f"[main] political lean failed for cluster {cluster.id}: {error}")
 
 
 async def main(Topics):
@@ -234,8 +303,7 @@ async def main(Topics):
             database_push.save_ingested_articles(result, topic)
             batch_articles.extend(result)
 
-        article_by_url = {article["url"]: article for article in batch_articles}
-        urls_to_extract = list(article_by_url.keys())
+        urls_to_extract = database_push.get_pending_urls(list({article["url"] for article in batch_articles}))
 
         extract_results = await asyncio.gather(
             *(run_extract(url) for url in urls_to_extract), return_exceptions=True
@@ -244,30 +312,16 @@ async def main(Topics):
         database_push.save_extracted_markdown(successful_extractions)
 
         embedded_articles = []
-        for result in successful_extractions:
-            if not result["markdown"]:
-                continue
+        for url, title, description, markdown in database_push.get_unembedded_articles():
             try:
-                article = article_by_url[result["url"]]
-                embedding_text = "\n\n".join([
-                    article["title"],
-                    article.get("description") or "",
-                    result["markdown"][:EMBEDDING_MARKDOWN_CHAR_LIMIT],
-                ])
-                embedding = run_enrich(embedding_text)
-                embedded_articles.append((result["url"], embedding))
+                embedding = run_enrich("\n\n".join([title, description or "", markdown]))
+                embedded_articles.append((url, embedding))
             except Exception as error:
-                print(f"[main] enrich failed for {result['url']}: {error}")
+                print(f"[main] enrich failed for {url}: {error}")
         database_push.save_embeddings(embedded_articles)
         cluster_newly_embedded_articles(database_push.session, [url for url, _ in embedded_articles])
 
-        for result in successful_extractions:
-            if not result["markdown"]:
-                continue
-            try:
-                run_political_lean(result)
-            except Exception as error:
-                print(f"[main] political lean failed for {result['url']}: {error}")
+        run_political_lean(database_push)
 
     database_push.close()
 

@@ -54,6 +54,7 @@ class NewsArticle(Base):
     political_lean: Mapped[str | None] = mapped_column(Text)
     political_lean_score: Mapped[float | None]
     lean_confidence: Mapped[float | None]
+    lean_breakdown: Mapped[dict | None] = mapped_column(JSONB)
 
     ingested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     extracted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -68,6 +69,7 @@ class StoryCluster(Base):
     member_article_ids: Mapped[list[int]] = mapped_column(JSONB, nullable=False)
     published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    lean_summary: Mapped[str | None] = mapped_column(Text)
 
 def get_db():
     with SessionLocal() as db:

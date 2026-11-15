@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -21,18 +21,21 @@ def get_latest_news(db: Session = Depends(get_db), limit: int = Query(30, le=100
     return db.execute(
         select(NewsArticle)
         .where(NewsArticle.markdown.is_not(None))
-        .order_by(NewsArticle.published_at.desc())
+        .order_by(NewsArticle.published_at.desc().nulls_last(), NewsArticle.id.desc())
         .limit(limit)
         .offset(offset)
     ).scalars().all()
 
 @router.get("/news/topic/{topic:path}", response_model=list[AllNews])
 def news_topic(topic: str, db: Session = Depends(get_db), limit: int = Query(30, le=100), offset: int = Query(0, ge=0)):
+    if topic not in ARTICLE_TOPICS:
+        raise HTTPException(status_code=404, detail="Topic not found")
+
     rows = db.execute(
         select(NewsArticle, source_count)
         .join(StoryCluster, StoryCluster.representative_article_id == NewsArticle.id)
         .where(StoryCluster.article_topic == topic)
-        .order_by(StoryCluster.published_at.desc())
+        .order_by(StoryCluster.published_at.desc(), StoryCluster.id.desc())
         .limit(limit)
         .offset(offset)
     ).all()
@@ -45,7 +48,7 @@ def news_topic(topic: str, db: Session = Depends(get_db), limit: int = Query(30,
 def all_topics(db: Session = Depends(get_db)):
     row_number = (
         func.row_number()
-        .over(partition_by=StoryCluster.article_topic, order_by=StoryCluster.published_at.desc())
+        .over(partition_by=StoryCluster.article_topic, order_by=(StoryCluster.published_at.desc(), StoryCluster.id.desc()))
         .label("row_number")
     )
     ranked = (
@@ -84,7 +87,7 @@ def top_news(db: Session = Depends(get_db), limit: int = Query(10, le=50), offse
         select(NewsArticle, source_count)
         .join(StoryCluster, StoryCluster.representative_article_id == NewsArticle.id)
         .where(StoryCluster.published_at > recent_cutoff)
-        .order_by(source_count.desc(), StoryCluster.published_at.desc())
+        .order_by(source_count.desc(), StoryCluster.published_at.desc(), StoryCluster.id.desc())
         .limit(limit)
         .offset(offset)
     ).all()
