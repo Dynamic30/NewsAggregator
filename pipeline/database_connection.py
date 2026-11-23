@@ -11,7 +11,7 @@ load_dotenv()
 
 news_db = os.getenv("DATABASE_PIPELINE")
 
-engine = create_engine(news_db)
+engine = create_engine(news_db, pool_pre_ping=True)
 
 SessionLocal = sessionmaker(autoflush=False, bind=engine, autocommit=False)
 

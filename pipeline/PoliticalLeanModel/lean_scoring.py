@@ -182,9 +182,11 @@ def call_model(messages):
                 model=model,
                 messages=messages,
                 format=RESPONSE_SCHEMA,
+                think=False,
                 options={"temperature": 0, "num_ctx": 16384, "num_predict": 3000},
             )
-            return json.loads(response["message"]["content"])
+            content = response["message"]["content"]
+            return json.loads(content[content.index("{"):content.rindex("}") + 1])
         except Exception as error:
             print(f"[lean_scoring] model call failed (attempt {attempt + 1}): {error}")
     return None

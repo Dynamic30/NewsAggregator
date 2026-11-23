@@ -1,11 +1,12 @@
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from email.utils import parsedate_to_datetime
 
 import requests
-from sqlalchemy import func, select, update
+from sqlalchemy import bindparam, func, select, update
 from sqlalchemy.dialects.postgresql import insert as postgres_insert
 
-from clean_article import clean_description, clean_source, clean_title
+from clean_article import clean_description, clean_source, clean_title, description_from_markdown
 from database_connection import NewsArticle, StoryCluster, get_db
 from Extract import Content
 from Ingest import BusinessStandard, EconomicTimes, GoogleNews, LiveMint, NDTV, TheHindu, TimesOfIndia
@@ -33,6 +34,9 @@ SOURCE_FETCHERS = {
 OLLAMA_EMBED_URL = os.getenv("OLLAMA_EMBED_URL")
 EMBEDDING_MODEL = "nomic-embed-text"
 EMBEDDING_MARKDOWN_CHAR_LIMIT = 4000
+EMBEDDING_DESCRIPTION_CHAR_LIMIT = 1000
+EMBEDDING_WRITE_BATCH = 500
+EMBEDDING_CONCURRENCY = 4
 
 Topics = {
     "National/India": {
@@ -153,12 +157,14 @@ class DATABASE_PUSH:
             print(f"[database_push] failed to save ingested articles for topic {topic}: {error}")
 
     def get_pending_urls(self, urls):
-        return self.session.execute(
+        pending_urls = self.session.execute(
             select(NewsArticle.url).where(NewsArticle.url.in_(urls), NewsArticle.extract_status == "pending")
         ).scalars().all()
+        self.session.rollback()
+        return pending_urls
 
     def get_unembedded_articles(self):
-        return self.session.execute(
+        rows = self.session.execute(
             select(
                 NewsArticle.url,
                 NewsArticle.title,
@@ -166,6 +172,8 @@ class DATABASE_PUSH:
                 func.left(NewsArticle.markdown, EMBEDDING_MARKDOWN_CHAR_LIMIT),
             ).where(NewsArticle.markdown.is_not(None), NewsArticle.markdown != "", NewsArticle.embedding.is_(None))
         ).all()
+        self.session.rollback()
+        return rows
 
     def save_extracted_markdown(self, extract_results):
         for result in extract_results:
@@ -178,6 +186,7 @@ class DATABASE_PUSH:
                         extract_status=result["status"].value,
                         used_browser=result["used_browser_fallback"],
                         image_url=func.coalesce(NewsArticle.image_url, result["image_url"]),
+                        description=func.coalesce(func.nullif(NewsArticle.description, ""), description_from_markdown(result["markdown"])),
                         extracted_at=func.now(),
                     )
                 )
@@ -187,17 +196,27 @@ class DATABASE_PUSH:
                 print(f"[database_push] failed to save extracted markdown for {result['url']}: {error}")
 
     def save_embeddings(self, embedded_articles):
-        for article_url, embedding in embedded_articles:
-            try:
-                self.session.execute(
-                    update(NewsArticle)
-                    .where(NewsArticle.url == article_url)
-                    .values(embedding=embedding, enriched_at=func.now())
-                )
-                self.session.commit()
-            except Exception as error:
-                self.session.rollback()
-                print(f"[database_push] failed to save embedding for {article_url}: {error}")
+        if not embedded_articles:
+            return
+        statement = (
+            update(NewsArticle)
+            .where(NewsArticle.url == bindparam("article_url"))
+            .values(embedding=bindparam("embedding"), enriched_at=func.now())
+            .execution_options(synchronize_session=False)
+        )
+        for start in range(0, len(embedded_articles), EMBEDDING_WRITE_BATCH):
+            chunk = embedded_articles[start:start + EMBEDDING_WRITE_BATCH]
+            for attempt in range(2):
+                try:
+                    self.session.connection().execute(
+                        statement,
+                        [{"article_url": url, "embedding": embedding} for url, embedding in chunk],
+                    )
+                    self.session.commit()
+                    break
+                except Exception as error:
+                    self.session.rollback()
+                    print(f"[database_push] failed to save {len(chunk)} embeddings (attempt {attempt + 1}): {str(error).splitlines()[0]}")
 
     def get_clusters_to_score(self):
         unscored_member = (
@@ -311,13 +330,16 @@ async def main(Topics):
         successful_extractions = [result for result in extract_results if not isinstance(result, Exception)]
         database_push.save_extracted_markdown(successful_extractions)
 
-        embedded_articles = []
-        for url, title, description, markdown in database_push.get_unembedded_articles():
+        def embed(row):
+            url, title, description, markdown = row
             try:
-                embedding = run_enrich("\n\n".join([title, description or "", markdown]))
-                embedded_articles.append((url, embedding))
+                return url, run_enrich("\n\n".join([title, (description or "")[:EMBEDDING_DESCRIPTION_CHAR_LIMIT], markdown]))
             except Exception as error:
                 print(f"[main] enrich failed for {url}: {error}")
+                return None
+
+        with ThreadPoolExecutor(max_workers=EMBEDDING_CONCURRENCY) as pool:
+            embedded_articles = [result for result in pool.map(embed, database_push.get_unembedded_articles()) if result]
         database_push.save_embeddings(embedded_articles)
         cluster_newly_embedded_articles(database_push.session, [url for url, _ in embedded_articles])
 
