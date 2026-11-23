@@ -22,14 +22,18 @@ source_count = func.jsonb_array_length(StoryCluster.member_article_ids)
 @rate_limit()
 @cache()
 async def get_latest_news(request: Request,db: Session = Depends(get_db), limit: int = Query(30, le=100), offset: int = Query(0, ge=0)):
-    articles = db.execute(
-        select(NewsArticle)
+    rows = db.execute(
+        select(NewsArticle, source_count)
+        .outerjoin(StoryCluster, StoryCluster.member_article_ids.contains(func.jsonb_build_array(NewsArticle.id)))
         .where(NewsArticle.markdown.is_not(None))
         .order_by(NewsArticle.published_at.desc().nulls_last(), NewsArticle.id.desc())
         .limit(limit)
         .offset(offset)
-    ).scalars().all()
-    return [AllNews.model_validate(article) for article in articles]
+    ).all()
+
+    for article, count in rows:
+        article.source_count = count
+    return [AllNews.model_validate(article) for article, _ in rows]
 
 @router.get("/news/topic/{topic:path}", response_model=list[AllNews])
 @rate_limit()

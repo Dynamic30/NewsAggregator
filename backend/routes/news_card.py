@@ -43,6 +43,8 @@ async def news_card(request: Request,article_id: int, db: Session = Depends(get_
                     source=m.source,
                     published_at=m.published_at,
                     political_lean_score=m.political_lean_score,
+                    lean_breakdown=m.lean_breakdown,
+                    url=m.url,
                     is_default=m.id == default_id,
                 )
                 for m in members

@@ -14,7 +14,7 @@ class AllNews(BaseModel):
     published_at: datetime | None
     image_url: str | None
     political_lean_score: float | None
-    source_count: int | None = None   # only populated by top_news; None elsewhere
+    source_count: int | None = None
 
 class ArticleDetail(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -37,6 +37,8 @@ class ClusterSource(BaseModel):
     source: str
     published_at: datetime | None
     political_lean_score: float | None
+    lean_breakdown: dict | None = None
+    url: str | None = None
     is_default: bool
 
 class ClusterInfo(BaseModel):
