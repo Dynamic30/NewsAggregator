@@ -1,3 +1,5 @@
+const ARTICLE_PATH = '/news/';
+
 const ICONS = {
   National: '<path d="M12 21s-6-5.2-6-10a6 6 0 1112 0c0 4.8-6 10-6 10z"/><circle cx="12" cy="11" r="2"/>',
   Business: '<path d="M5 19V11M12 19V5M19 19v-6"/>',

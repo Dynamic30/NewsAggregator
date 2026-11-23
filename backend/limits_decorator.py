@@ -1,11 +1,12 @@
 from settings import redis_cache, redis_rate_limiter
 import json
 from functools import wraps
-from fastapi import HTTPException, Request
+from fastapi import HTTPException, Request, Response
+from fastapi.encoders import jsonable_encoder
 from redis.exceptions import RedisError
 import hashlib
 
-def cache(expire: int = 120):
+def cache(expire: int = 600):
     def decorator(func):
         @wraps(func)
         async def wrapper(*args, **kwargs):
@@ -20,12 +21,12 @@ def cache(expire: int = 120):
             except RedisError:
                 cached = None                    # redis down -> treat as a miss
             if cached:
-                return json.loads(cached)
+                return Response(content=cached, media_type="application/json")
 
             # Miss — run actual function
             result = await func(*args, **kwargs)
             try:
-                await redis_cache.setex(key, expire, json.dumps(result, default=str))
+                await redis_cache.setex(key, expire, json.dumps(jsonable_encoder(result)))
             except RedisError:
                 pass
             return result

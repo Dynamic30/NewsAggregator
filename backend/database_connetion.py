@@ -9,7 +9,7 @@ load_dotenv()
 
 news_db = os.getenv("DATABASE")
 
-engine = create_engine(news_db)
+engine = create_engine(news_db, isolation_level="AUTOCOMMIT", pool_recycle=240)
 
 SessionLocal = sessionmaker(autoflush=False, bind=engine, autocommit=False)
 

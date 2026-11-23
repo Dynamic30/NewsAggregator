@@ -26,3 +26,10 @@ if (path && path !== '/' && !path.endsWith('/error.html')) {
   el.textContent = path;
   el.hidden = false;
 }
+
+window.addEventListener('pageshow', (e) => {
+  if (e.persisted) setTheme(loadPref('theme', 'light'));
+});
+window.addEventListener('storage', (e) => {
+  if (e.key === 'skimfeed_theme') setTheme(loadPref('theme', 'light'));
+});

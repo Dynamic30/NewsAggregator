@@ -1,16 +1,19 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from database_connetion import get_db
 from model import NewsArticle
 from schema import SourceSummary
+from limits_decorator import cache, rate_limit
 
 router = APIRouter()
 
 
 @router.get("/sources", response_model=list[SourceSummary])
-def sources(db: Session = Depends(get_db), min_stories: int = Query(3, ge=1)):
+@rate_limit()
+@cache()
+async def sources(request: Request,db: Session = Depends(get_db), min_stories: int = Query(3, ge=1)):
     average_score = func.avg(NewsArticle.political_lean_score)
     rows = db.execute(
         select(

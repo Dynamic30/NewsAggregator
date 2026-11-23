@@ -1,5 +1,6 @@
 // ---------- paged lists (latest news, topic list) ----------
 let latestPager = null, topicPager = null;
+let topToken = 0, topicsToken = 0;
 
 function newPager(options) {
   return Object.assign({ items: [], done: false, loading: false, stale: false }, options);
@@ -10,8 +11,9 @@ async function loadMore(pager) {
   pager.loading = true;
   const list = document.getElementById(pager.listId), more = document.getElementById(pager.moreId);
   const first = !pager.items.length;
-  if (first) { list.innerHTML = emptyNote('Loading…'); more.innerHTML = ''; }
-  else more.innerHTML = emptyNote('Loading…');
+  more.innerHTML = '';
+  if (first) list.innerHTML = skeletonList();
+  else list.insertAdjacentHTML('beforeend', '<div class="sk-more">' + skeletonCards(3) + '</div>');
 
   let page;
   try {
@@ -19,13 +21,18 @@ async function loadMore(pager) {
   } catch (e) {
     pager.loading = false;
     if (pager.stale) return;
-    if (first) list.innerHTML = errorNote();
+    list.querySelectorAll('.sk-more').forEach(node => node.remove());
+    if (first) {
+      list.innerHTML = errorNote();
+      if (pager.onFirstPage) pager.onFirstPage([]);
+    }
     else more.innerHTML = emptyNote('Could not load more.') + '<button class="load-more-btn" data-more="' + pager.listId + '">Try again</button>';
     return;
   }
   pager.loading = false;
   if (pager.stale) return;
 
+  list.querySelectorAll('.sk-more').forEach(node => node.remove());
   pager.items = pager.items.concat(page);
   pager.done = page.length < PAGE_SIZE;
   if (first) list.innerHTML = page.length ? page.map(cardHTML).join('') : emptyNote(pager.emptyText);
@@ -45,33 +52,37 @@ function tnCard(a, rank, variant) {
   const photo = (variant !== 'mini')
     ? '<div class="tn-photo" style="--c:' + c + '">' + svgIcon(a.category) + mediaImg(a) + '<span class="save-dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h12v16l-6-4-6 4V4z"/></svg></span></div>'
     : '';
-  return '<a class="tn-card tn-' + variant + '" href="#" data-id="' + a.id + '" style="--c:' + c + '">' +
+  return '<a class="tn-card tn-' + variant + '" href="' + ARTICLE_PATH + a.id + '" style="--c:' + c + '">' +
     photo + ribbonFor(a, rank) +
     '<p class="tn-eyebrow" style="--c:' + c + '">' + catLabel(a.category) + ' &middot; ' + sourceLabel(a) + '</p>' +
     '<h3>' + esc(a.title) + '</h3>' +
     '<p class="desc">' + esc(a.description) + '</p>' +
-    '<div class="tn-byline"><span class="tn-avatar">' + esc(a.source.charAt(0)) + '</span><span><strong>' + esc(a.source) + '</strong> &middot; ' + timeAgo(a) + '</span></div>' +
+    '<div class="tn-byline"><span class="tn-avatar">' + esc(a.source.charAt(0)) + '</span><span><strong>' + esc(a.source) + '</strong>' + agoSuffix(a) + '</span></div>' +
   '</a>';
 }
 function tnMoreCard(a) {
-  return '<a class="tn-more-card" href="#" data-id="' + a.id + '">' +
+  return '<a class="tn-more-card" href="' + ARTICLE_PATH + a.id + '">' +
     '<div class="tn-more-thumb" style="background:' + catVar(a.category) + '">' + svgIcon(a.category) + mediaImg(a) + '</div>' +
-    '<div><p class="tn-more-eyebrow">' + catLabel(a.category) + ' &middot; ' + timeAgo(a) + '</p><h4>' + esc(a.title) + '</h4></div>' +
+    '<div><p class="tn-more-eyebrow">' + catLabel(a.category) + agoSuffix(a) + '</p><h4>' + esc(a.title) + '</h4></div>' +
   '</a>';
 }
 async function renderTopNews() {
   document.getElementById('dateText').textContent = dateText();
   const grid = document.getElementById('topGrid'), more = document.getElementById('topMore');
-  grid.innerHTML = emptyNote('Loading…');
-  more.innerHTML = '';
+  const token = ++topToken;
+  grid.innerHTML = skeletonTopGrid();
+  more.innerHTML = skeletonTopMore();
   let top;
   try {
     top = (await getJSON('/top_news?limit=10')).map(normaliseArticle);
   } catch (e) {
+    if (token !== topToken) return;
     grid.innerHTML = errorNote();
+    more.innerHTML = '';
     return;
   }
-  if (!top.length) { grid.innerHTML = emptyNote('No top stories yet.'); return; }
+  if (token !== topToken) return;
+  if (!top.length) { grid.innerHTML = emptyNote('No top stories yet.'); more.innerHTML = ''; return; }
   const hero = top[0], left1 = top[1], left2 = top[2], right1 = top[3];
   const accent =
     '<div class="tn-accent"><p class="label">Top stories today</p><div class="rule"></div>' +
@@ -86,10 +97,10 @@ async function renderTopNews() {
 
 // ---------- plain list card ----------
 function cardHTML(a) {
-  return '<a class="card" href="#" data-id="' + a.id + '">' +
+  return '<a class="card" href="' + ARTICLE_PATH + a.id + '">' +
     '<div class="thumb" style="background:' + catVar(a.category) + '">' + svgIcon(a.category) + mediaImg(a) + '</div>' +
     '<div class="card-body">' +
-      '<div class="card-meta"><span class="cat-label" style="color:' + catVar(a.category) + '">' + catLabel(a.category) + '</span><span>&middot;</span><span>' + esc(a.source) + '</span><span>&middot;</span><span>' + timeAgo(a) + '</span></div>' +
+      '<div class="card-meta"><span class="cat-label" style="color:' + catVar(a.category) + '">' + catLabel(a.category) + '</span><span>&middot;</span><span>' + esc(a.source) + '</span>' + (timeAgo(a) ? '<span>&middot;</span><span>' + timeAgo(a) + '</span>' : '') + '</div>' +
       '<h3 class="card-title">' + esc(a.title) + '</h3>' +
       '<p class="card-snippet">' + esc(a.description) + '</p>' +
     '</div>' +
@@ -103,22 +114,25 @@ function renderAllNews() {
 
 // ---------- TOPICS overview: every section with its top 3 ----------
 function overviewCard(a) {
-  return '<a class="ov-card" href="#" data-id="' + a.id + '">' +
+  return '<a class="ov-card" href="' + ARTICLE_PATH + a.id + '">' +
     '<div class="ov-photo" style="background:' + catVar(a.category) + '">' + svgIcon(a.category) + mediaImg(a) + '</div>' +
-    '<p class="ov-eyebrow">' + esc(a.source) + ' &middot; ' + timeAgo(a) + '</p>' +
+    '<p class="ov-eyebrow">' + esc(a.source) + agoSuffix(a) + '</p>' +
     '<h4>' + esc(a.title) + '</h4>' +
   '</a>';
 }
 async function renderTopicsOverview() {
   const box = document.getElementById('topicsList');
-  box.innerHTML = emptyNote('Loading…');
+  const token = ++topicsToken;
+  box.innerHTML = skeletonTopics();
   let sections;
   try {
     sections = await getJSON('/news/all_topics');
   } catch (e) {
+    if (token !== topicsToken) return;
     box.innerHTML = errorNote();
     return;
   }
+  if (token !== topicsToken) return;
   const byCat = {};
   sections.forEach(s => { byCat[TOPIC_KEY[s.topic]] = s.articles.map(normaliseArticle); });
   box.innerHTML = TOPICS.map(cat => {
@@ -139,13 +153,13 @@ const carReduced = window.matchMedia && window.matchMedia('(prefers-reduced-moti
 
 function slideHTML(a) {
   const c = catVar(a.category);
-  return '<a class="car-slide" href="#" data-id="' + a.id + '">' +
+  return '<a class="car-slide" href="' + ARTICLE_PATH + a.id + '">' +
     '<div class="slide-image" style="background:' + c + '">' + svgIcon(a.category) + mediaImg(a) + '</div>' +
     '<div class="slide-content">' +
       '<p class="eyebrow" style="color:' + c + '">' + catLabel(a.category) + ' &middot; ' + sourceLabel(a) + '</p>' +
       '<h3>' + esc(a.title) + '</h3>' +
       '<p class="slide-desc">' + esc(a.description) + '</p>' +
-      '<div class="tn-byline"><span class="tn-avatar" style="--c:' + c + '">' + esc(a.source.charAt(0)) + '</span><span><strong>' + esc(a.source) + '</strong> &middot; ' + timeAgo(a) + '</span></div>' +
+      '<div class="tn-byline"><span class="tn-avatar" style="--c:' + c + '">' + esc(a.source.charAt(0)) + '</span><span><strong>' + esc(a.source) + '</strong>' + agoSuffix(a) + '</span></div>' +
     '</div>' +
   '</a>';
 }
@@ -178,8 +192,9 @@ function renderTopic(cat) {
   document.getElementById('topicEyebrow').textContent = 'Section';
   document.getElementById('topicTitle').textContent = CAT_LABEL[cat];
   document.getElementById('topicName').textContent = CAT_LABEL[cat];
-  document.getElementById('topicCarousel').innerHTML = '';
+  document.getElementById('topicCarousel').innerHTML = skeletonCarousel();
   carCount = 0;
+  stopAuto();
   if (topicPager) topicPager.stale = true;
   topicPager = newPager({
     path: topicPath(cat),

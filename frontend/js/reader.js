@@ -1,11 +1,13 @@
 let readerToken = 0;
+const readerCards = new Map();
+const PANEL_MIN_MS = 500;
 
 function sourcesHTML(card) {
   const a = card.article, list = card.cluster.sources;
   const item = s => {
     const scored = s.political_lean_score !== null;
     const score = Math.round(s.political_lean_score);
-    return '<li><button class="src-item src-open' + (s.article_id === a.id ? ' current' : '') + '" data-open-id="' + s.article_id + '">' +
+    return '<li><button class="src-item src-open' + (s.article_id === a.id ? ' current' : '') + '" data-switch-id="' + s.article_id + '">' +
       '<span class="src-badge">' + esc(s.source.charAt(0)) + '</span>' +
       '<span class="src-main"><span class="src-name">' + esc(s.source) + (s.is_default ? '<span class="src-primary">Primary</span>' : '') + '</span>' +
         (scored ? scoreTrack(score) : '<span class="src-unscored">Not scored yet</span>') + '</span>' +
@@ -16,15 +18,16 @@ function sourcesHTML(card) {
     '<ul class="sources-list">' + list.map(item).join('') + '</ul><p class="sources-key"><span>Opposition</span><span>Neutral 50</span><span>Government</span></p>';
 }
 function leadSplit(card) {
-  const summary = card.cluster.summary;
-  return '<div class="lead-split">' +
-    '<div class="lead-col"><p class="lead-desc">' + esc(card.article.description) + '</p>' +
-      (summary ? '<p class="cluster-summary"><span class="sources-label">How outlets covered it</span>' + esc(summary) + '</p>' : '') + '</div>' +
-    '<div class="lead-col">' + sourcesHTML(card) + '</div>' +
-  '</div>';
+  const description = card.article.description, summary = card.cluster.summary;
+  const main = description || summary
+    ? '<div class="lead-col lead-main">' +
+        (description ? '<p class="lead-desc">' + esc(description) + '</p>' : '') +
+        (summary ? '<p class="cluster-summary"><span class="sources-label">How outlets covered it</span>' + esc(summary) + '</p>' : '') +
+      '</div>'
+    : '';
+  return '<div class="lead-split' + (main ? '' : ' single') + '">' + main + '<div class="lead-col">' + sourcesHTML(card) + '</div></div>';
 }
-function textBox(a) {
-  const body = a.markdown ? renderMarkdown(a.markdown) : emptyNote('The full text is not available yet.');
+function textBox() {
   return '<div class="text-box" id="textBox">' +
     '<div class="reader-controls">' +
       '<div class="text-toolbar">' +
@@ -48,67 +51,136 @@ function textBox(a) {
         '<span class="intensity-val" id="intensityVal"></span>' +
       '</div>' +
     '</div>' +
-    '<div class="text-content" id="articleContent">' + body + '</div>' +
+    '<div class="text-content" id="articleContent"></div>' +
   '</div>';
 }
-function renderReaderBody(card) {
-  currentArticle = card;
-  const a = card.article;
+function readerHeadHTML(a) {
   const original = safeUrl(a.url);
-  const metaTitle =
-    '<div class="reader-meta"><span class="cat-label" style="color:' + catVar(a.category) + '">' + catLabel(a.category) + '</span><span>&middot;</span><span>' + esc(a.source) + '</span>' +
+  return '<div class="reader-meta"><span class="cat-label" style="color:' + catVar(a.category) + '">' + catLabel(a.category) + '</span><span>&middot;</span><span>' + esc(a.source) + '</span>' +
       (timeAgo(a) ? '<span>&middot;</span><span>' + timeAgo(a) + '</span>' : '') +
       (original ? '<span>&middot;</span><a class="reader-original" href="' + esc(original) + '" target="_blank" rel="noopener noreferrer">Original</a>' : '') + '</div>' +
     '<h2 class="reader-title">' + esc(a.title) + '</h2>';
-  const img = '<div class="reader-image" style="background:' + catVar(a.category) + '">' + svgIcon(a.category) + mediaImg(a) + '</div>';
-  const imgSmall = '<div class="reader-image small" style="background:' + catVar(a.category) + '">' + svgIcon(a.category) + mediaImg(a) + '</div>';
-  let html;
-  if (layout === 'classic') {
-    html = img + metaTitle + leadSplit(card) + textBox(a);
-  } else if (layout === 'compact') {
-    html = metaTitle + imgSmall + leadSplit(card) + textBox(a);
-  } else {
-    html = metaTitle + img + leadSplit(card) + textBox(a);
-  }
-  document.getElementById('readerBody').innerHTML = html;
-  applyFontSize(); applyReadingTheme();
 }
-function setLayout(l) {
-  layout = l; savePref('layout', l); updateLayoutButtons();
-  if (!document.getElementById('articleView').hidden && currentArticle) renderReaderBody(currentArticle);
+function readerPhotoHTML(a) {
+  const size = layout === 'compact' ? ' small' : '';
+  const src = safeUrl(a.image_url);
+  return src
+    ? '<figure class="reader-photo' + size + '"><img src="' + esc(src) + '" alt="" referrerpolicy="no-referrer" onerror="this.closest(\'figure\').remove()"></figure>'
+    : '<div class="reader-image' + size + '" style="background:' + catVar(a.category) + '">' + svgIcon(a.category) + '</div>';
 }
-function updateLayoutButtons() {
-  document.querySelectorAll('.layout-btn').forEach(b => {
-    const on = b.dataset.layout === layout;
-    b.classList.toggle('active', on); b.setAttribute('aria-checked', on ? 'true' : 'false');
+function fillReader(card) {
+  currentArticle = card;
+  const a = card.article;
+  document.getElementById('rdHead').innerHTML = readerHeadHTML(a);
+  document.getElementById('rdPhoto').innerHTML = readerPhotoHTML(a);
+  document.getElementById('rdLead').innerHTML = leadSplit(card);
+  document.getElementById('articleContent').innerHTML = a.markdown ? renderMarkdown(a.markdown) : emptyNote('The full text is not available yet.');
+  applyFontSize();
+  ['rdHead', 'rdPhoto', 'rdLead', 'articleContent'].forEach(id => {
+    const el = document.getElementById(id);
+    el.classList.remove('reader-fade');
+    void el.offsetWidth;
+    el.classList.add('reader-fade');
   });
 }
+function renderReaderBody(card) {
+  const head = '<div id="rdHead"></div>', photo = '<div id="rdPhoto"></div>';
+  document.getElementById('readerBody').innerHTML =
+    '<div id="rdNotice"></div>' + (layout === 'classic' ? photo + head : head + photo) + '<div id="rdLead"></div>' + textBox();
+  fillReader(card);
+  applyReadingTheme();
+}
+function loadCard(id) {
+  if (!readerCards.has(id)) {
+    const request = getJSON('/news_card/' + id).then(card => {
+      card.article = normaliseArticle(card.article);
+      return card;
+    });
+    readerCards.set(id, request);
+    request.catch(() => readerCards.delete(id));
+  }
+  return readerCards.get(id);
+}
+function readerSkeleton() {
+  const colors = readingColors(readingTheme, currentIntensity());
+  const small = layout === 'compact';
+  const head = '<div style="margin-bottom:12px">' + sk('45%', '11px', 'margin-bottom:10px') + skLines(2, '32px', 12, '60%') + '</div>';
+  const photo = sk(small ? '240px' : '100%', small ? '170px' : '240px', 'border-radius:18px;margin-bottom:' + (small ? '20px' : '24px'));
+  const source = '<div class="src-item" style="margin-bottom:11px">' + sk('24px', '24px', 'border-radius:50%;flex-shrink:0') + '<span class="src-main">' + sk('50%', '12px', 'margin-bottom:6px') + sk('100%', '5px') + '</span></div>';
+  const lead = '<div class="lead-split"><div class="lead-col lead-main">' + skLines(4, '16px', 10, '55%') + '</div>' +
+    '<div class="lead-col"><div class="sources-head">' + sk('140px', '11px') + sk('24px', '18px', 'border-radius:999px') + '</div>' + repeatHTML(3, source) + '</div></div>';
+  const box = '<div class="text-box" style="--rt-bg:' + colors.bg + ';--rt-fg:' + colors.fg + ';--rt-line:' + colors.line + '">' +
+    '<div class="reader-controls"><div class="text-toolbar">' + sk('96px', '38px', 'border-radius:999px') + sk('230px', '38px', 'border-radius:999px') + sk('74px', '38px', 'border-radius:999px') + '</div></div>' +
+    '<div class="text-content">' + repeatHTML(3, '<div style="margin-bottom:18px">' + skLines(5, '14px', 16, '70%') + '</div>') + '</div></div>';
+  return SK_STATUS + (layout === 'classic' ? photo + head : head + photo) + lead + box;
+}
+function stopSpeech() {
+  try { speechSynthesis.cancel(); } catch (e) {}
+  const btn = document.getElementById('speechBtn');
+  if (btn) btn.textContent = 'Listen';
+}
+function showPanels() {
+  hidePanels();
+  const hosts = [
+    document.querySelector('#rdPhoto > *'),
+    document.querySelector('#rdLead .lead-main'),
+    document.getElementById('articleContent')
+  ];
+  hosts.forEach((host, index) => {
+    if (host) host.insertAdjacentHTML('beforeend', '<div class="load-panel' + (index === 2 ? ' top' : '') + '"><i class="spinner"></i></div>');
+  });
+}
+function hidePanels() { document.querySelectorAll('.load-panel').forEach(panel => panel.remove()); }
+function wait(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
 async function openArticle(id) {
   const token = ++readerToken;
-  stopAuto();
-  try { speechSynthesis.cancel(); } catch (e) {}
-  ['topView', 'allView', 'topicsView', 'topicView', 'sourcesView'].forEach(v => { document.getElementById(v).hidden = true; });
-  document.getElementById('articleView').hidden = false;
-  document.getElementById('readerBody').innerHTML = emptyNote('Loading…');
-  window.scrollTo(0, 0);
+  const body = document.getElementById('readerBody');
+  stopSpeech();
+  body.innerHTML = readerSkeleton();
 
   let card;
   try {
-    card = await getJSON('/news_card/' + id);
+    card = await loadCard(id);
   } catch (e) {
-    if (token === readerToken) document.getElementById('readerBody').innerHTML = '<p class="fallback-note">Could not load this article. <button class="retry-btn" data-open-id="' + id + '">Retry</button></p>';
+    if (token !== readerToken) return;
+    body.innerHTML = e.status === 404
+      ? '<p class="fallback-note">Article not found.</p><button class="load-more-btn" data-go-top>Back to Top News</button>'
+      : '<p class="fallback-note">Could not load this article. <button class="retry-btn" data-open-id="' + id + '">Retry</button></p>';
     return;
   }
   if (token !== readerToken) return;
-  card.article = normaliseArticle(card.article);
   renderReaderBody(card);
+  document.title = card.article.title + ' · SkimFeed';
   announce('Opened: ' + card.article.title);
+  card.cluster.sources.filter(s => s.article_id !== id).slice(0, 8).forEach(s => loadCard(s.article_id).catch(() => {}));
 }
-function closeArticle() {
-  readerToken++;
-  try { speechSynthesis.cancel(); } catch (e) {}
-  document.getElementById('articleView').hidden = true;
-  showView(currentView, currentCat);
+async function switchSource(id) {
+  if (currentArticle && currentArticle.article.id === id) return;
+  const token = ++readerToken;
+  const started = Date.now();
+  stopSpeech();
+  document.getElementById('rdNotice').innerHTML = '';
+  document.querySelectorAll('.src-open.loading').forEach(b => b.classList.remove('loading'));
+  const clicked = document.querySelector('.src-open[data-switch-id="' + id + '"]');
+  if (clicked) clicked.classList.add('loading');
+  showPanels();
+
+  let card;
+  try {
+    card = await loadCard(id);
+  } catch (e) {
+    if (token !== readerToken) return;
+    hidePanels();
+    if (clicked) clicked.classList.remove('loading');
+    document.getElementById('rdNotice').innerHTML = '<p class="fallback-note">Could not load that source. <button class="retry-btn" data-switch-id="' + id + '">Retry</button></p>';
+    return;
+  }
+  await wait(PANEL_MIN_MS - (Date.now() - started));
+  if (token !== readerToken) return;
+  fillReader(card);
+  document.title = card.article.title + ' · SkimFeed';
+  announce('Opened: ' + card.article.title);
 }
 function applyFontSize() { const el = document.getElementById('articleContent'); if (el) el.style.fontSize = fontSize + 'px'; }
 function changeFontSize(d) { fontSize = Math.min(26, Math.max(14, fontSize + d)); applyFontSize(); savePref('fontSize', fontSize); }

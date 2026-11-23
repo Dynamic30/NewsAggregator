@@ -1,34 +1,31 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from database_connetion import get_db
 from model import NewsArticle, StoryCluster
 from schema import ArticleDetail, ClusterInfo, ClusterSource, NewsCard
+from limits_decorator import cache, rate_limit
 
 router = APIRouter()
 
 
 @router.get("/news_card/{article_id}", response_model=NewsCard)
-def news_card(article_id: int, db: Session = Depends(get_db)):
-    article = db.get(NewsArticle, article_id)
-    if article is None:
-        raise HTTPException(status_code=404, detail="Article not found")
-
+@rate_limit()
+@cache()
+async def news_card(request: Request,article_id: int, db: Session = Depends(get_db)):
     cluster = db.execute(
         select(StoryCluster).where(StoryCluster.member_article_ids.contains([article_id]))
     ).scalars().first()
+    member_ids = cluster.member_article_ids if cluster else [article_id]
+    members = db.execute(select(NewsArticle).where(NewsArticle.id.in_(member_ids))).scalars().all()
 
-    if cluster is None:
-        members = [article]
-        default_id = article.id
-        summary = None
-    else:
-        members = db.execute(
-            select(NewsArticle).where(NewsArticle.id.in_(cluster.member_article_ids))
-        ).scalars().all()
-        default_id = cluster.representative_article_id
-        summary = cluster.lean_summary
+    article = next((member for member in members if member.id == article_id), None)
+    if article is None:
+        raise HTTPException(status_code=404, detail="Article not found")
+
+    default_id = cluster.representative_article_id if cluster else article.id
+    summary = cluster.lean_summary if cluster else None
 
     members.sort(key=lambda m: (
         m.id != default_id,

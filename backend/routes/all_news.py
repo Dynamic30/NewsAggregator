@@ -1,12 +1,14 @@
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from database_connetion import get_db
 from model import ARTICLE_TOPICS, NewsArticle, StoryCluster
 from schema import AllNews, TopicSection
+from limits_decorator import cache, rate_limit
+
 
 TOPICS_OVERVIEW_ARTICLES_PER_TOPIC = 3
 TOP_NEWS_RECENCY_WINDOW_DAYS = 2
@@ -17,17 +19,22 @@ source_count = func.jsonb_array_length(StoryCluster.member_article_ids)
 
 
 @router.get("/latest_news", response_model=list[AllNews])
-def get_latest_news(db: Session = Depends(get_db), limit: int = Query(30, le=100), offset: int = Query(0, ge=0)):
-    return db.execute(
+@rate_limit()
+@cache()
+async def get_latest_news(request: Request,db: Session = Depends(get_db), limit: int = Query(30, le=100), offset: int = Query(0, ge=0)):
+    articles = db.execute(
         select(NewsArticle)
         .where(NewsArticle.markdown.is_not(None))
         .order_by(NewsArticle.published_at.desc().nulls_last(), NewsArticle.id.desc())
         .limit(limit)
         .offset(offset)
     ).scalars().all()
+    return [AllNews.model_validate(article) for article in articles]
 
 @router.get("/news/topic/{topic:path}", response_model=list[AllNews])
-def news_topic(topic: str, db: Session = Depends(get_db), limit: int = Query(30, le=100), offset: int = Query(0, ge=0)):
+@rate_limit()
+@cache()
+async def news_topic(topic: str, request: Request,db: Session = Depends(get_db), limit: int = Query(30, le=100), offset: int = Query(0, ge=0)):
     if topic not in ARTICLE_TOPICS:
         raise HTTPException(status_code=404, detail="Topic not found")
 
@@ -42,10 +49,12 @@ def news_topic(topic: str, db: Session = Depends(get_db), limit: int = Query(30,
 
     for article, count in rows:
         article.source_count = count
-    return [article for article, _ in rows]
+    return [AllNews.model_validate(article) for article, _ in rows]
 
 @router.get("/news/all_topics", response_model=list[TopicSection])
-def all_topics(db: Session = Depends(get_db)):
+@rate_limit()
+@cache()
+async def all_topics(request: Request,db: Session = Depends(get_db)):
     row_number = (
         func.row_number()
         .over(partition_by=StoryCluster.article_topic, order_by=(StoryCluster.published_at.desc(), StoryCluster.id.desc()))
@@ -80,7 +89,9 @@ def all_topics(db: Session = Depends(get_db)):
     ]
 
 @router.get("/top_news", response_model=list[AllNews])
-def top_news(db: Session = Depends(get_db), limit: int = Query(10, le=50), offset: int = Query(0, ge=0)):
+@rate_limit()
+@cache()
+async def top_news(request: Request,db: Session = Depends(get_db), limit: int = Query(10, le=50), offset: int = Query(0, ge=0)):
     recent_cutoff = datetime.now(timezone.utc) - timedelta(days=TOP_NEWS_RECENCY_WINDOW_DAYS)
 
     rows = db.execute(
@@ -94,4 +105,4 @@ def top_news(db: Session = Depends(get_db), limit: int = Query(10, le=50), offse
 
     for article, count in rows:
         article.source_count = count
-    return [article for article, _ in rows]
+    return [AllNews.model_validate(article) for article, _ in rows]

@@ -37,6 +37,11 @@ def index():
     return FileResponse(FRONTEND_DIR / "index.html")
 
 
+@app.get("/news/{article_id:int}")
+def news_page(article_id: int):
+    return FileResponse(FRONTEND_DIR / "newscard.html")
+
+
 
 @app.exception_handler(404)
 async def not_found(request, exc):

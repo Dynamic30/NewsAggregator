@@ -1,15 +1,21 @@
 let leanFilter = 'all';
 let sourceData = [];
+let sourcesToken = 0;
 
 async function renderSources() {
   const body = document.getElementById('sourcesBody');
-  body.innerHTML = emptyNote('Loading…');
+  const token = ++sourcesToken;
+  body.innerHTML = skeletonSources();
+  let data;
   try {
-    sourceData = await getJSON('/sources');
+    data = await getJSON('/sources');
   } catch (e) {
+    if (token !== sourcesToken) return;
     body.innerHTML = errorNote();
     return;
   }
+  if (token !== sourcesToken) return;
+  sourceData = data;
   renderSourceList();
 }
 
