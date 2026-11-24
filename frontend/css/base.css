@@ -103,6 +103,7 @@ html[data-theme="dark"] .topnav { border-bottom-color: rgba(255,255,255,0.08); }
 .menu-btn:hover { background: rgba(0,0,0,0.05); }
 .menu-btn svg { width: 20px; height: 20px; }
 .brand-mark { display: flex; align-items: center; gap: 9px; font-weight: 700; letter-spacing: -0.02em; font-size: 1.1rem; }
+a.brand-mark { text-decoration: none; color: inherit; }
 .brand-icon { width: 27px; height: 27px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #FFFAF2; background: var(--accent); flex-shrink: 0; }
 .brand-icon svg { width: 15px; height: 15px; }
 .topnav-links { display: flex; gap: 22px; margin-left: 14px; }

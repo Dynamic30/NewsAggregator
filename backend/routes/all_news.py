@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 
 from database_connetion import get_db
 from model import ARTICLE_TOPICS, NewsArticle, StoryCluster
@@ -17,6 +17,17 @@ router = APIRouter()
 
 source_count = func.jsonb_array_length(StoryCluster.member_article_ids)
 
+LIST_COLUMNS = load_only(
+    NewsArticle.id,
+    NewsArticle.title,
+    NewsArticle.description,
+    NewsArticle.source,
+    NewsArticle.article_topic,
+    NewsArticle.published_at,
+    NewsArticle.image_url,
+    NewsArticle.political_lean_score,
+)
+
 
 @router.get("/latest_news", response_model=list[AllNews])
 @rate_limit()
@@ -26,6 +37,7 @@ async def get_latest_news(request: Request,db: Session = Depends(get_db), limit:
         select(NewsArticle, source_count)
         .outerjoin(StoryCluster, StoryCluster.member_article_ids.contains(func.jsonb_build_array(NewsArticle.id)))
         .where(NewsArticle.markdown.is_not(None))
+        .options(LIST_COLUMNS)
         .order_by(NewsArticle.published_at.desc().nulls_last(), NewsArticle.id.desc())
         .limit(limit)
         .offset(offset)
@@ -46,6 +58,7 @@ async def news_topic(topic: str, request: Request,db: Session = Depends(get_db),
         select(NewsArticle, source_count)
         .join(StoryCluster, StoryCluster.representative_article_id == NewsArticle.id)
         .where(StoryCluster.article_topic == topic)
+        .options(LIST_COLUMNS)
         .order_by(StoryCluster.published_at.desc(), StoryCluster.id.desc())
         .limit(limit)
         .offset(offset)
@@ -78,6 +91,7 @@ async def all_topics(request: Request,db: Session = Depends(get_db)):
         select(NewsArticle, ranked.c.source_count)
         .join(ranked, ranked.c.representative_article_id == NewsArticle.id)
         .where(ranked.c.row_number <= TOPICS_OVERVIEW_ARTICLES_PER_TOPIC)
+        .options(LIST_COLUMNS)
         .order_by(ranked.c.article_topic, ranked.c.row_number)
     ).all()
 
@@ -102,6 +116,7 @@ async def top_news(request: Request,db: Session = Depends(get_db), limit: int = 
         select(NewsArticle, source_count)
         .join(StoryCluster, StoryCluster.representative_article_id == NewsArticle.id)
         .where(StoryCluster.published_at > recent_cutoff)
+        .options(LIST_COLUMNS)
         .order_by(source_count.desc(), StoryCluster.published_at.desc(), StoryCluster.id.desc())
         .limit(limit)
         .offset(offset)

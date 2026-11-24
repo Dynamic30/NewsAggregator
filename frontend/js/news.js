@@ -63,7 +63,7 @@ function tnCard(a, rank, variant) {
 function tnMoreCard(a) {
   return '<a class="tn-more-card" href="' + ARTICLE_PATH + a.id + '">' +
     '<div class="tn-more-thumb" style="background:' + catVar(a.category) + '">' + svgIcon(a.category) + mediaImg(a) + '</div>' +
-    '<div><p class="tn-more-eyebrow">' + catLabel(a.category) + agoSuffix(a) + '</p><h4>' + esc(a.title) + '</h4></div>' +
+    '<div><p class="tn-more-eyebrow">' + catLabel(a.category) + agoSuffix(a) + sourcesBadge(a) + '</p><h4>' + esc(a.title) + '</h4></div>' +
   '</a>';
 }
 async function renderTopNews() {
@@ -100,7 +100,7 @@ function cardHTML(a) {
   return '<a class="card" href="' + ARTICLE_PATH + a.id + '">' +
     '<div class="thumb" style="background:' + catVar(a.category) + '">' + svgIcon(a.category) + mediaImg(a) + '</div>' +
     '<div class="card-body">' +
-      '<div class="card-meta"><span class="cat-label" style="color:' + catVar(a.category) + '">' + catLabel(a.category) + '</span><span>&middot;</span><span>' + esc(a.source) + '</span>' + (timeAgo(a) ? '<span>&middot;</span><span>' + timeAgo(a) + '</span>' : '') + '</div>' +
+      '<div class="card-meta"><span class="cat-label" style="color:' + catVar(a.category) + '">' + catLabel(a.category) + '</span><span>&middot;</span><span>' + esc(a.source) + '</span>' + (timeAgo(a) ? '<span>&middot;</span><span>' + timeAgo(a) + '</span>' : '') + sourcesBadge(a) + '</div>' +
       '<h3 class="card-title">' + esc(a.title) + '</h3>' +
       '<p class="card-snippet">' + esc(a.description) + '</p>' +
     '</div>' +
@@ -116,7 +116,7 @@ function renderAllNews() {
 function overviewCard(a) {
   return '<a class="ov-card" href="' + ARTICLE_PATH + a.id + '">' +
     '<div class="ov-photo" style="background:' + catVar(a.category) + '">' + svgIcon(a.category) + mediaImg(a) + '</div>' +
-    '<p class="ov-eyebrow">' + esc(a.source) + agoSuffix(a) + '</p>' +
+    '<p class="ov-eyebrow">' + esc(a.source) + agoSuffix(a) + sourcesBadge(a) + '</p>' +
     '<h4>' + esc(a.title) + '</h4>' +
   '</a>';
 }

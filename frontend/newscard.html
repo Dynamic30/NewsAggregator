@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23B05C49'/%3E%3Cpath transform='translate(2.8 2.8) scale(1.1)' fill='%23FFFAF2' d='M12 2l1.9 5.5L19 9l-5.1 1.5L12 16l-1.9-5.5L5 9l5.1-1.5L12 2z'/%3E%3C/svg%3E">
 <script>try { var savedTheme = JSON.parse(localStorage.getItem('skimfeed_theme')); if (savedTheme) document.documentElement.setAttribute('data-theme', savedTheme); } catch (e) {}</script>
 <title>Article · SkimFeed</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -17,10 +18,10 @@
     <button class="menu-btn" id="menuBtn" aria-label="Open menu">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
     </button>
-    <div class="brand-mark">
+    <a class="brand-mark" href="/">
       <span class="brand-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.9 5.5L19 9l-5.1 1.5L12 16l-1.9-5.5L5 9l5.1-1.5L12 2z"/></svg></span>
       <span>SkimFeed</span>
-    </div>
+    </a>
     <nav class="topnav-links">
       <button class="navbtn" data-view="top">Top News</button>
       <button class="navbtn" data-view="all">Latest News</button>
@@ -94,7 +95,12 @@
   </aside>
 
   <main class="main" id="mainContent">
-    <div class="reader-top"><button class="back-btn">&larr; Back</button></div>
+    <div class="reader-top">
+      <button class="back-btn" aria-label="Go back">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="11 18 5 12 11 6"/></svg>
+        <span>Back</span>
+      </button>
+    </div>
     <div class="reader-body" id="readerBody"></div>
   </main>
 </div>

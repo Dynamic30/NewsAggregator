@@ -24,6 +24,9 @@ function timeAgo(a) {
 }
 function agoSuffix(a) { return timeAgo(a) ? ' &middot; ' + timeAgo(a) : ''; }
 function sourceLabel(a) { return a.impact + (a.impact === 1 ? ' source' : ' sources'); }
+function sourcesBadge(a) {
+  return '<span class="card-sources' + (a.impact > 1 ? ' multi' : '') + '" title="Covered by ' + sourceLabel(a) + '"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 3 8l9 5 9-5-9-5z"/><path d="m3 13 9 5 9-5"/></svg>' + sourceLabel(a) + '</span>';
+}
 function emptyNote(text) { return '<p class="fallback-note">' + text + '</p>'; }
 function errorNote() { return '<p class="fallback-note">Could not load this right now. <button class="retry-btn" data-retry>Retry</button></p>'; }
 function catLabel(cat) { return esc(CAT_LABEL[cat] || cat); }

@@ -13,7 +13,10 @@ document.addEventListener('click', (e) => {
   const switchBtn = e.target.closest('[data-switch-id]');
   if (switchBtn) { switchSource(parseInt(switchBtn.dataset.switchId, 10)); return; }
 
-  const openBtn = e.target.closest('[data-open-id]');
+  const whyBtn = e.target.closest('[data-why]');
+  if (whyBtn) { toggleWhy(whyBtn); return; }
+
+  const openBtn =e.target.closest('[data-open-id]');
   if (openBtn) { openArticle(parseInt(openBtn.dataset.openId, 10)); return; }
 
   if (e.target.closest('[data-go-top]')) { navigateTo('top'); return; }

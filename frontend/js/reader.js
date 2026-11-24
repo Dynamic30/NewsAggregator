@@ -2,30 +2,54 @@ let readerToken = 0;
 const readerCards = new Map();
 const PANEL_MIN_MS = 500;
 
+const LEAN_GROUPS = [['government', 'Government'], ['opposition', 'Opposition'], ['public', 'Public'], ['business', 'Business']];
+
+function reasonsHTML(breakdown) {
+  return LEAN_GROUPS.map(([key, label]) => {
+    const group = breakdown && breakdown[key];
+    if (!group || (group.score == null && !group.reason)) return '';
+    const score = group.score == null ? '' : Math.round(group.score);
+    return '<div class="why-row"><span class="why-group">' + label + '</span>' +
+      (score === '' ? '' : '<span class="why-score" style="color:var(--lean-' + scoreBucket(score) + ')">' + score + '</span>') +
+      (group.reason ? '<span class="why-text">' + esc(group.reason) + '</span>' : '') + '</div>';
+  }).join('');
+}
 function sourcesHTML(card) {
   const a = card.article, list = card.cluster.sources;
   const item = s => {
     const scored = s.political_lean_score !== null;
     const score = Math.round(s.political_lean_score);
-    return '<li><button class="src-item src-open' + (s.article_id === a.id ? ' current' : '') + '" data-switch-id="' + s.article_id + '">' +
+    const reasons = scored ? reasonsHTML(s.lean_breakdown) : '';
+    const panelId = 'why-' + s.article_id;
+    const original = safeUrl(s.url);
+    return '<li><div class="src-row"><button class="src-item src-open' + (s.article_id === a.id ? ' current' : '') + '" data-switch-id="' + s.article_id + '">' +
       '<span class="src-badge">' + esc(s.source.charAt(0)) + '</span>' +
       '<span class="src-main"><span class="src-name">' + esc(s.source) + (s.is_default ? '<span class="src-primary">Primary</span>' : '') + '</span>' +
         (scored ? scoreTrack(score) : '<span class="src-unscored">Not scored yet</span>') + '</span>' +
       (scored ? '<span class="src-score" style="color:var(--lean-' + scoreBucket(score) + ')">' + score + '</span>' : '') +
-    '</button></li>';
+    '</button>' +
+    (reasons ? '<button class="src-why" data-why aria-expanded="false" aria-controls="' + panelId + '" aria-label="Why ' + esc(s.source) + ' scored ' + score + '">Why?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button>' : '') +
+    (original ? '<a class="src-ext" href="' + esc(original) + '" target="_blank" rel="noopener noreferrer" aria-label="Open original at ' + esc(s.source) + '" title="Open original"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><g transform="rotate(-45 12 12)"><rect x="1.5" y="8" width="12" height="8" rx="4"/><rect x="10.5" y="8" width="12" height="8" rx="4"/></g></svg></a>' : '') +
+    '</div>' + (reasons ? '<div class="src-reasons" id="' + panelId + '" hidden>' + reasons + '</div>' : '') + '</li>';
   };
   return '<div class="sources-head"><span class="sources-label">Sources we found it on</span><span class="sources-count">' + list.length + '</span></div>' +
-    '<ul class="sources-list">' + list.map(item).join('') + '</ul><p class="sources-key"><span>Opposition</span><span>Neutral 50</span><span>Government</span></p>';
+    '<ul class="sources-list">' + list.map(item).join('') + '</ul>' +
+    (list.some(s => s.political_lean_score !== null) ? '<p class="sources-key"><span>Opposition</span><span>Neutral 50</span><span>Government</span></p>' : '');
+}
+function toggleWhy(button) {
+  const open = button.getAttribute('aria-expanded') !== 'true';
+  button.setAttribute('aria-expanded', open);
+  document.getElementById(button.getAttribute('aria-controls')).hidden = !open;
 }
 function leadSplit(card) {
   const description = card.article.description, summary = card.cluster.summary;
   const main = description || summary
-    ? '<div class="lead-col lead-main">' +
+    ? '<div class="lead-col lead-main" tabindex="0" role="region" aria-label="Story description">' +
         (description ? '<p class="lead-desc">' + esc(description) + '</p>' : '') +
         (summary ? '<p class="cluster-summary"><span class="sources-label">How outlets covered it</span>' + esc(summary) + '</p>' : '') +
       '</div>'
     : '';
-  return '<div class="lead-split' + (main ? '' : ' single') + '">' + main + '<div class="lead-col">' + sourcesHTML(card) + '</div></div>';
+  return '<div class="lead-split' + (main ? '' : ' single') + '">' + main + '<div class="lead-col lead-sources">' + sourcesHTML(card) + '</div></div>';
 }
 function textBox() {
   return '<div class="text-box" id="textBox">' +
