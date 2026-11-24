@@ -1,4 +1,5 @@
 const ARTICLE_PATH = '/news/';
+const PAGES = {home: '/', top: '/top-news', latest: '/latest-news', topics: '/topics', sources: '/source', topic: '/topic/'};
 
 const ICONS = {
   National: '<path d="M12 21s-6-5.2-6-10a6 6 0 1112 0c0 4.8-6 10-6 10z"/><circle cx="12" cy="11" r="2"/>',
@@ -24,7 +25,6 @@ const LEAN_LABELS = ['Strong opposition', 'Leans opposition', 'Neutral', 'Leans 
 // Reading surface ramps: each theme interpolates between a light and a
 // deep endpoint, so the intensity slider sets the "depth" of that mode.
 const READ_RAMP = {
-  light: { from: [255,255,255], to: [241,234,222], fg: '#1A1A1A', line: 'rgba(0,0,0,0.12)' },
-  sepia: { from: [247,238,221], to: [226,206,170], fg: '#3B2F1E', line: 'rgba(59,47,30,0.18)' },
-  dark:  { from: [40,36,33],    to: [12,10,9],     fg: '#ECEAE4', line: 'rgba(255,255,255,0.16)' }
+  light: { from: [255,255,255], to: [226,206,170], fg: '#1A1A1A', line: 'rgba(0,0,0,0.12)' },
+  dark: { from: [40,36,33],    to: [12,10,9],     fg: '#ECEAE4', line: 'rgba(255,255,255,0.16)' }
 };

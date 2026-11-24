@@ -62,7 +62,6 @@ function textBox() {
         '<div class="tool-group">' +
           '<div class="theme-swaps" role="radiogroup" aria-label="Reading theme">' +
             '<button class="theme-swap" role="radio" data-theme="light" aria-label="Light"><span class="swatch-dot swatch-light"></span><span class="swap-label">Light</span></button>' +
-            '<button class="theme-swap" role="radio" data-theme="sepia" aria-label="Sepia"><span class="swatch-dot swatch-sepia"></span><span class="swap-label">Sepia</span></button>' +
             '<button class="theme-swap" role="radio" data-theme="dark" aria-label="Dark"><span class="swatch-dot swatch-dark"></span><span class="swap-label">Dark</span></button>' +
           '</div>' +
           '<button class="dots-btn" id="intensityToggle" aria-label="Adjust depth"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button>' +
@@ -233,7 +232,7 @@ function applyReadingTheme() {
   const slider = document.getElementById('intensitySlider');
   if (slider) slider.value = inten;
   const lbl = document.getElementById('intensityLabel');
-  if (lbl) lbl.textContent = readingTheme.charAt(0).toUpperCase() + readingTheme.slice(1) + ' depth';
+  if (lbl) lbl.textContent = readingTheme === 'dark' ? 'Darkness' : 'Warmth';
   const val = document.getElementById('intensityVal');
   if (val) val.textContent = inten + '%';
 }

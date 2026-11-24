@@ -34,13 +34,36 @@ app.include_router(source.router)
 
 @app.get("/")
 def index():
-    return FileResponse(FRONTEND_DIR / "index.html")
+    return FileResponse(FRONTEND_DIR / "topnews.html")
 
 
 @app.get("/news/{article_id:int}")
 def news_page(article_id: int):
     return FileResponse(FRONTEND_DIR / "newscard.html")
 
+@app.get("/top-news", include_in_schema=False)
+def top_news_page():
+    return FileResponse(FRONTEND_DIR / "topnews.html")
+
+
+@app.get("/latest-news", include_in_schema=False)
+def latest_news_page():
+    return FileResponse(FRONTEND_DIR / "latestnews.html")
+
+
+@app.get("/topics", include_in_schema=False)
+def topics_page():
+    return FileResponse(FRONTEND_DIR / "topics.html")
+
+
+@app.get("/topic/{slug}", include_in_schema=False)
+def topic_page(slug: str):
+    return FileResponse(FRONTEND_DIR / "topic.html")
+
+
+@app.get("/source", include_in_schema=False)
+def sources_page():
+    return FileResponse(FRONTEND_DIR / "sources.html")
 
 
 @app.exception_handler(404)

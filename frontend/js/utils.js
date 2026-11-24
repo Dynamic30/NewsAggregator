@@ -1,7 +1,7 @@
 let theme = loadPref('theme', 'light');
-let readingTheme = loadPref('readingTheme', 'light');
-let readingIntensity = loadPref('readingIntensity', { light: 30, sepia: 50, dark: 50 });
-let fontSize = loadPref('fontSize', 18);
+let readingTheme = loadPref('readingTheme', 'light') === 'dark' ? 'dark' : 'light';
+let readingIntensity = loadPref('readingIntensity', { light: 15, dark: 50 });
+let fontSize = loadPref('fontSize', 19);
 let layout = loadPref('layout', 'standard');
 let currentView = loadPref('view', 'top');
 let currentCat = loadPref('viewCat', null);

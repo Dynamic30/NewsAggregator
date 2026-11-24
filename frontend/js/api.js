@@ -24,3 +24,7 @@ function normaliseArticle(a) {
 function topicPath(cat) {
   return '/news/topic/' + encodeURIComponent(CAT_LABEL[cat]).replace(/%2F/g, '/') + '?';
 }
+
+function topicPageUrl(cat) {
+  return PAGES.topic + cat.toLowerCase();
+}
