@@ -1,10 +1,12 @@
 import json
+import logging
 
 import ollama
 from dotenv import load_dotenv
 import os
 
-load_dotenv()
+load_dotenv(override=True)
+log = logging.getLogger("pipeline")
 
 llm_url = os.getenv("LLM_URL")
 llm_api_key = os.getenv("LLM_API_KEY")
@@ -188,7 +190,7 @@ def call_model(messages):
             content = response["message"]["content"]
             return json.loads(content[content.index("{"):content.rindex("}") + 1])
         except Exception as error:
-            print(f"[lean_scoring] model call failed (attempt {attempt + 1}): {error}")
+            log.error(f"[lean_scoring] model call failed (attempt {attempt + 1}): {str(error).splitlines()[0]}")
     return None
 
 def llm_main(articles):

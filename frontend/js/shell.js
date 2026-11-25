@@ -41,9 +41,6 @@ document.addEventListener('click', (e) => {
   if (seg) { setAppTheme(seg.dataset.theme); return; }
   const layoutBtn = e.target.closest('.layout-btn');
   if (layoutBtn) { setLayout(layoutBtn.dataset.layout); return; }
-
-  const navBtn = e.target.closest('[data-view]');
-  if (navBtn) navigateTo(navBtn.dataset.view, navBtn.dataset.cat);
 });
 
 document.addEventListener('keydown', (e) => {

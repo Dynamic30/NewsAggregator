@@ -12,10 +12,6 @@ setTheme(loadPref('theme', 'light'));
 document.getElementById('themeSwitch').addEventListener('click', () => {
   setTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
 });
-document.getElementById('homeBtn').addEventListener('click', () => {
-  savePref('view', 'top');
-  savePref('viewCat', null);
-});
 document.getElementById('backBtn').addEventListener('click', () => {
   if (history.length > 1) history.back(); else location.href = '/';
 });

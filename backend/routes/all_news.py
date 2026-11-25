@@ -32,7 +32,7 @@ LIST_COLUMNS = load_only(
 @router.get("/latest_news", response_model=list[AllNews])
 @rate_limit()
 @cache()
-async def get_latest_news(request: Request,db: Session = Depends(get_db), limit: int = Query(30, le=100), offset: int = Query(0, ge=0)):
+async def get_latest_news(request: Request,db: Session = Depends(get_db), limit: int = Query(30, ge=1, le=100), offset: int = Query(0, ge=0, le=10000)):
     rows = db.execute(
         select(NewsArticle, source_count)
         .outerjoin(StoryCluster, StoryCluster.member_article_ids.contains(func.jsonb_build_array(NewsArticle.id)))
@@ -50,7 +50,7 @@ async def get_latest_news(request: Request,db: Session = Depends(get_db), limit:
 @router.get("/news/topic/{topic:path}", response_model=list[AllNews])
 @rate_limit()
 @cache()
-async def news_topic(topic: str, request: Request,db: Session = Depends(get_db), limit: int = Query(30, le=100), offset: int = Query(0, ge=0)):
+async def news_topic(topic: str, request: Request,db: Session = Depends(get_db), limit: int = Query(30, ge=1, le=100), offset: int = Query(0, ge=0, le=10000)):
     if topic not in ARTICLE_TOPICS:
         raise HTTPException(status_code=404, detail="Topic not found")
 
@@ -109,7 +109,7 @@ async def all_topics(request: Request,db: Session = Depends(get_db)):
 @router.get("/top_news", response_model=list[AllNews])
 @rate_limit()
 @cache()
-async def top_news(request: Request,db: Session = Depends(get_db), limit: int = Query(10, le=50), offset: int = Query(0, ge=0)):
+async def top_news(request: Request,db: Session = Depends(get_db), limit: int = Query(10, ge=1, le=50), offset: int = Query(0, ge=0, le=10000)):
     recent_cutoff = datetime.now(timezone.utc) - timedelta(days=TOP_NEWS_RECENCY_WINDOW_DAYS)
 
     rows = db.execute(

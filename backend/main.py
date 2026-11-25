@@ -34,7 +34,7 @@ app.include_router(source.router)
 
 @app.get("/")
 def index():
-    return FileResponse(FRONTEND_DIR / "topnews.html")
+    return FileResponse(FRONTEND_DIR / "index.html")
 
 
 @app.get("/news/{article_id:int}")

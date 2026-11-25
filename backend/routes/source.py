@@ -13,7 +13,7 @@ router = APIRouter()
 @router.get("/sources", response_model=list[SourceSummary])
 @rate_limit()
 @cache()
-async def sources(request: Request,db: Session = Depends(get_db), min_stories: int = Query(3, ge=1)):
+async def sources(request: Request,db: Session = Depends(get_db), min_stories: int = Query(3, ge=1, le=1000)):
     average_score = func.avg(NewsArticle.political_lean_score)
     rows = db.execute(
         select(

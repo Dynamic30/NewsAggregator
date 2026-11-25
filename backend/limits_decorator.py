@@ -39,7 +39,8 @@ def rate_limit(max_requests: int = 120, window: int = 60):
         async def wrapper(*args, request: Request, **kwargs):
             # When auth is added, just set request.state.user
             user = getattr(request.state, "user", None)
-            identifier = user.id if user else request.client.host
+            client_host = request.client.host if request.client else "unknown"
+            identifier = user.id if user else request.headers.get("cf-connecting-ip", client_host)
 
             key = f"rate:{func.__name__}:{identifier}"
 

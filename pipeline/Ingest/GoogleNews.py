@@ -5,15 +5,20 @@ from bs4 import BeautifulSoup
 from curl_cffi.requests import AsyncSession
 from googlenewsdecoder import gnewsdecoder
 
-DECODE_CONCURRENCY_LIMIT = 10
+DECODE_CONCURRENCY_LIMIT = 4
+DECODE_RETRY_DELAY_SECONDS = 2
 
 
 async def decode_google_news_url(gnews_url, decode_semaphore):
     if not gnews_url:
         return None
     async with decode_semaphore:
-        decoded = await asyncio.to_thread(gnewsdecoder, gnews_url)
-    return decoded["decoded_url"] if decoded and decoded.get("success") else gnews_url
+        for attempt in range(2):
+            decoded = await asyncio.to_thread(gnewsdecoder, gnews_url)
+            if decoded and decoded.get("success"):
+                return decoded["decoded_url"]
+            await asyncio.sleep(DECODE_RETRY_DELAY_SECONDS)
+    return None
 
 
 async def fetch_google_news(topic: str, lang: str = "en", country: str = "IN") -> list[dict]:
@@ -36,6 +41,8 @@ async def fetch_google_news(topic: str, lang: str = "en", country: str = "IN") -
 
     results = []
     for item, article_url in zip(items, decoded_urls):
+        if not article_url:
+            continue
         title_tag = item.find("title")
         pubdate_tag = item.find("pubDate")
         desc_tag = item.find("description")

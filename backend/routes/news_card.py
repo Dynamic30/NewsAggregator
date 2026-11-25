@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
@@ -18,7 +18,7 @@ CARD_COLUMNS = (
 @router.get("/news_card/{article_id}", response_model=NewsCard)
 @rate_limit()
 @cache()
-async def news_card(request: Request,article_id: int, db: Session = Depends(get_db)):
+async def news_card(request: Request,article_id: int = Path(ge=1), db: Session = Depends(get_db)):
     cluster = (
         select(StoryCluster.member_article_ids, StoryCluster.representative_article_id, StoryCluster.lean_summary)
         .where(StoryCluster.member_article_ids.contains([article_id]))

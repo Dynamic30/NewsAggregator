@@ -1,9 +1,3 @@
-function navigateTo(view, cat) {
-  savePref('view', view);
-  savePref('viewCat', cat || null);
-  location.href = '/';
-}
-
 function goBack() {
   const cameFromSite = document.referrer && new URL(document.referrer).origin === location.origin;
   if (cameFromSite) history.back(); else location.href = '/';
@@ -19,7 +13,7 @@ document.addEventListener('click', (e) => {
   const openBtn =e.target.closest('[data-open-id]');
   if (openBtn) { openArticle(parseInt(openBtn.dataset.openId, 10)); return; }
 
-  if (e.target.closest('[data-go-top]')) { navigateTo('top'); return; }
+  if (e.target.closest('[data-go-top]')) { location.href = PAGES.top; return; }
   if (e.target.closest('.back-btn')) { goBack(); return; }
 
   const fontBtn = e.target.closest('.tool-btn[data-delta]');
@@ -33,6 +27,8 @@ document.addEventListener('click', (e) => {
 document.addEventListener('input', (e) => {
   if (e.target && e.target.id === 'intensitySlider') setReadingIntensity(parseInt(e.target.value, 10));
 });
+
+renderChrome('article');
 
 window.addEventListener('DOMContentLoaded', () => {
   openArticle(parseInt(location.pathname.slice(ARTICLE_PATH.length), 10));

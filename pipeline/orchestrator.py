@@ -1,9 +1,11 @@
 import asyncio
+import itertools
+import time
 from concurrent.futures import ThreadPoolExecutor
 from email.utils import parsedate_to_datetime
 
 import requests
-from sqlalchemy import bindparam, func, select, update
+from sqlalchemy import Boolean, Text, bindparam, column, func, select, update, values
 from sqlalchemy.dialects.postgresql import insert as postgres_insert
 
 from clean_article import clean_description, clean_source, clean_title, description_from_markdown
@@ -14,10 +16,24 @@ from PoliticalLeanModel.lean_scoring import llm_main
 from story_clustering import cluster_newly_embedded_articles
 from dotenv import load_dotenv
 import os
-load_dotenv()
+import logging
 
+load_dotenv(override=True)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+    handlers=[logging.StreamHandler(), logging.FileHandler("pipeline.log")],
+)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+log = logging.getLogger("pipeline")
 
 TOPIC_BATCH_SIZE = 5
+EXTRACT_LOG_EVERY = 25
+SAVE_LOG_EVERY = 100
+EXTRACT_WRITE_BATCH = 200
+EMBED_LOG_EVERY = 100
+SCORE_LOG_EVERY = 10
 
 NON_POLITICAL_TOPICS = ("Sports", "Entertainment", "Markets/Stocks")
 
@@ -125,13 +141,21 @@ def parse_published_date(raw_published_date):
         return None
 
 
+def log_progress(label, done, total, every):
+    if done % every == 0 or done == total:
+        log.info(f"{label} {done}/{total}")
+
+
 class DATABASE_PUSH:
     def __init__(self):
         self._db_gen = get_db()
         self.session = next(self._db_gen)
 
     def close(self):
-        self._db_gen.close()
+        try:
+            self._db_gen.close()
+        except Exception as error:
+            log.warning(f"[database_push] closing the session failed: {str(error).splitlines()[0]}")
 
     def save_ingested_articles(self, articles, topic):
         if not articles:
@@ -149,12 +173,14 @@ class DATABASE_PUSH:
             for article in articles
         ]
         statement = postgres_insert(NewsArticle).values(rows).on_conflict_do_nothing(index_elements=["url"])
-        try:
-            self.session.execute(statement)
-            self.session.commit()
-        except Exception as error:
-            self.session.rollback()
-            print(f"[database_push] failed to save ingested articles for topic {topic}: {error}")
+        for attempt in range(2):
+            try:
+                self.session.execute(statement)
+                self.session.commit()
+                break
+            except Exception as error:
+                self.session.rollback()
+                log.error(f"[database_push] failed to save ingested articles for topic {topic} (attempt {attempt + 1}): {str(error).splitlines()[0]}")
 
     def get_pending_urls(self, urls):
         pending_urls = self.session.execute(
@@ -176,24 +202,51 @@ class DATABASE_PUSH:
         return rows
 
     def save_extracted_markdown(self, extract_results):
-        for result in extract_results:
-            try:
-                self.session.execute(
-                    update(NewsArticle)
-                    .where(NewsArticle.url == result["url"])
-                    .values(
-                        markdown=result["markdown"],
-                        extract_status=result["status"].value,
-                        used_browser=result["used_browser_fallback"],
-                        image_url=func.coalesce(NewsArticle.image_url, result["image_url"]),
-                        description=func.coalesce(func.nullif(NewsArticle.description, ""), description_from_markdown(result["markdown"])),
-                        extracted_at=func.now(),
+        log.info(f"saving {len(extract_results)} extracted pages")
+        for start in range(0, len(extract_results), EXTRACT_WRITE_BATCH):
+            chunk = extract_results[start:start + EXTRACT_WRITE_BATCH]
+            extracted = values(
+                column("url", Text),
+                column("markdown", Text),
+                column("status", Text),
+                column("used_browser", Boolean),
+                column("image_url", Text),
+                column("description", Text),
+                name="extracted",
+            ).data(
+                [
+                    (
+                        result["url"],
+                        result["markdown"],
+                        result["status"].value,
+                        result["used_browser_fallback"],
+                        result["image_url"],
+                        description_from_markdown(result["markdown"]),
                     )
+                    for result in chunk
+                ]
+            )
+            statement = (
+                update(NewsArticle)
+                .where(NewsArticle.url == extracted.c.url)
+                .values(
+                    markdown=extracted.c.markdown,
+                    extract_status=extracted.c.status,
+                    used_browser=extracted.c.used_browser,
+                    image_url=func.coalesce(NewsArticle.image_url, extracted.c.image_url),
+                    description=func.coalesce(func.nullif(NewsArticle.description, ""), extracted.c.description),
+                    extracted_at=func.now(),
                 )
-                self.session.commit()
-            except Exception as error:
-                self.session.rollback()
-                print(f"[database_push] failed to save extracted markdown for {result['url']}: {error}")
+            )
+            for attempt in range(2):
+                try:
+                    self.session.connection().execute(statement)
+                    self.session.commit()
+                    break
+                except Exception as error:
+                    self.session.rollback()
+                    log.error(f"[database_push] failed to save {len(chunk)} extracted pages (attempt {attempt + 1}): {str(error).splitlines()[0]}")
+            log_progress("saved", start + len(chunk), len(extract_results), SAVE_LOG_EVERY)
 
     def save_embeddings(self, embedded_articles):
         if not embedded_articles:
@@ -216,7 +269,7 @@ class DATABASE_PUSH:
                     break
                 except Exception as error:
                     self.session.rollback()
-                    print(f"[database_push] failed to save {len(chunk)} embeddings (attempt {attempt + 1}): {str(error).splitlines()[0]}")
+                    log.error(f"[database_push] failed to save {len(chunk)} embeddings (attempt {attempt + 1}): {str(error).splitlines()[0]}")
 
     def get_clusters_to_score(self):
         unscored_member = (
@@ -230,12 +283,23 @@ class DATABASE_PUSH:
         clusters = self.session.execute(
             select(StoryCluster).where(StoryCluster.article_topic.not_in(NON_POLITICAL_TOPICS), unscored_member)
         ).scalars().all()
-        return [
-            (cluster, self.session.execute(select(NewsArticle).where(NewsArticle.id.in_(cluster.member_article_ids))).scalars().all())
+        clusters_to_score = [
+            (
+                cluster.id,
+                [
+                    dict(row)
+                    for row in self.session.execute(
+                        select(NewsArticle.id, NewsArticle.title, NewsArticle.description, NewsArticle.markdown)
+                        .where(NewsArticle.id.in_(cluster.member_article_ids))
+                    ).mappings()
+                ],
+            )
             for cluster in clusters
         ]
+        self.session.rollback()
+        return clusters_to_score
 
-    def save_lean_results(self, cluster, result):
+    def save_lean_results(self, cluster_id, result):
         try:
             for article_id, lean in result["scores"].items():
                 self.session.execute(
@@ -248,12 +312,13 @@ class DATABASE_PUSH:
                         lean_breakdown=lean["breakdown"],
                     )
                 )
+            cluster = self.session.get(StoryCluster, cluster_id)
             cluster.lean_summary = result["cluster_summary"]
             cluster.representative_article_id = result["representative_article_id"]
             self.session.commit()
         except Exception as error:
             self.session.rollback()
-            print(f"[database_push] failed to save lean results for cluster {cluster.id}: {error}")
+            log.error(f"[database_push] failed to save lean results for cluster {cluster_id}: {error}")
 
 
 async def run_ingest(topic, region="IN"):
@@ -271,7 +336,7 @@ async def run_ingest(topic, region="IN"):
                     fetched_articles = await fetch_function(feed_identifier)
                 articles.extend(fetched_articles)
             except Exception as error:
-                print(f"[run_ingest] {source_name} failed for topic {topic}: {error}")
+                log.error(f"[run_ingest] {source_name} failed for topic {topic}: {error}")
                 continue
     return articles
 
@@ -288,27 +353,31 @@ def run_enrich(text):
 
 def run_political_lean(database_push):
     if not os.getenv("LLM_MODEL"):
-        print("[main] political lean skipped: LLM_MODEL not set")
+        log.warning("[main] political lean skipped: LLM_MODEL not set")
         return
 
-    for cluster, articles in database_push.get_clusters_to_score():
+    clusters = database_push.get_clusters_to_score()
+    log.info(f"scoring {len(clusters)} clusters")
+    for number, (cluster_id, articles) in enumerate(clusters, 1):
         try:
-            result = llm_main([
-                {"id": article.id, "title": article.title, "description": article.description, "markdown": article.markdown}
-                for article in articles
-            ])
+            result = llm_main(articles)
             if result:
-                database_push.save_lean_results(cluster, result)
+                database_push.save_lean_results(cluster_id, result)
         except Exception as error:
-            print(f"[main] political lean failed for cluster {cluster.id}: {error}")
+            log.error(f"[main] political lean failed for cluster {cluster_id}: {error}")
+        log_progress("scored", number, len(clusters), SCORE_LOG_EVERY)
 
 
 async def main(Topics):
+    started = time.monotonic()
+    log.info("run started")
     topic_names = list(Topics.keys())
     database_push = DATABASE_PUSH()
+    batch_count = len(range(0, len(topic_names), TOPIC_BATCH_SIZE))
 
     for batch_start in range(0, len(topic_names), TOPIC_BATCH_SIZE):
         topic_batch = topic_names[batch_start:batch_start + TOPIC_BATCH_SIZE]
+        log.info(f"batch {batch_start // TOPIC_BATCH_SIZE + 1}/{batch_count}: {', '.join(topic_batch)}")
 
         ingest_results = await asyncio.gather(
             *(run_ingest(topic) for topic in topic_batch), return_exceptions=True
@@ -317,36 +386,57 @@ async def main(Topics):
         batch_articles = []
         for topic, result in zip(topic_batch, ingest_results):
             if isinstance(result, Exception):
-                print(f"[main] ingest failed for topic {topic}: {result}")
+                log.error(f"[main] ingest failed for topic {topic}: {result}")
                 continue
             database_push.save_ingested_articles(result, topic)
             batch_articles.extend(result)
 
         urls_to_extract = database_push.get_pending_urls(list({article["url"] for article in batch_articles}))
+        log.info(f"ingested {len(batch_articles)} articles, extracting {len(urls_to_extract)} pages")
+        extract_done = itertools.count(1)
+
+        async def extract(url):
+            try:
+                return await run_extract(url)
+            finally:
+                log_progress("extract", next(extract_done), len(urls_to_extract), EXTRACT_LOG_EVERY)
 
         extract_results = await asyncio.gather(
-            *(run_extract(url) for url in urls_to_extract), return_exceptions=True
+            *(extract(url) for url in urls_to_extract), return_exceptions=True
         )
         successful_extractions = [result for result in extract_results if not isinstance(result, Exception)]
         database_push.save_extracted_markdown(successful_extractions)
+
+        rows = database_push.get_unembedded_articles()
+        log.info(f"embedding {len(rows)} articles")
+        embed_done = itertools.count(1)
 
         def embed(row):
             url, title, description, markdown = row
             try:
                 return url, run_enrich("\n\n".join([title, (description or "")[:EMBEDDING_DESCRIPTION_CHAR_LIMIT], markdown]))
             except Exception as error:
-                print(f"[main] enrich failed for {url}: {error}")
+                log.error(f"[main] enrich failed for {url}: {error}")
                 return None
+            finally:
+                log_progress("embed", next(embed_done), len(rows), EMBED_LOG_EVERY)
 
         with ThreadPoolExecutor(max_workers=EMBEDDING_CONCURRENCY) as pool:
-            embedded_articles = [result for result in pool.map(embed, database_push.get_unembedded_articles()) if result]
+            embedded_articles = [result for result in pool.map(embed, rows) if result]
         database_push.save_embeddings(embedded_articles)
+        log.info(f"saved {len(embedded_articles)} embeddings, clustering")
         cluster_newly_embedded_articles(database_push.session, [url for url, _ in embedded_articles])
+        log.info("clustering done")
 
         run_political_lean(database_push)
 
     database_push.close()
+    log.info(f"run finished in {(time.monotonic() - started) / 60:.1f} min")
 
 
 if __name__ == "__main__":
-    asyncio.run(main(Topics))
+    try:
+        asyncio.run(main(Topics))
+    except Exception:
+        log.exception("run crashed")
+        raise

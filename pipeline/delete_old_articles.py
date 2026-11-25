@@ -6,8 +6,8 @@ from sqlalchemy import delete, select
 from database_connection import NewsArticle, SessionLocal, StoryCluster
 from dotenv import load_dotenv
 
-load_dotenv()
-RETENTION_DAYS = int(os.getenv("RETENTION_DAYS") or "30")
+load_dotenv(override=True)
+RETENTION_DAYS = max(int(os.getenv("RETENTION_DAYS") or "30"), 1)
 
 
 def delete_old_articles():

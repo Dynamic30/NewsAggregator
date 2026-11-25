@@ -3,8 +3,6 @@ let readingTheme = loadPref('readingTheme', 'light') === 'dark' ? 'dark' : 'ligh
 let readingIntensity = loadPref('readingIntensity', { light: 15, dark: 50 });
 let fontSize = loadPref('fontSize', 19);
 let layout = loadPref('layout', 'standard');
-let currentView = loadPref('view', 'top');
-let currentCat = loadPref('viewCat', null);
 let currentArticle = null;
 
 function savePref(k, v) { try { localStorage.setItem('skimfeed_' + k, JSON.stringify(v)); } catch (e) {} }
