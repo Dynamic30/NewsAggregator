@@ -48,7 +48,8 @@ def rate_limit(max_requests: int = 120, window: int = 60):
             # When auth is added, just set request.state.user
             user = getattr(request.state, "user", None)
             client_host = request.client.host if request.client else "unknown"
-            identifier = user.id if user else request.headers.get("cf-connecting-ip", client_host)
+            forwarded = request.headers.get("x-forwarded-for", client_host)
+            identifier = user.id if user else forwarded.split(",")[0].strip()
 
             key = f"rate:{func.__name__}:{identifier}"
 
