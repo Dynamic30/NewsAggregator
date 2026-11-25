@@ -92,7 +92,7 @@ pip install fastapi==0.116.1 SQLAlchemy==2.0.42 psycopg2-binary==2.9.10 \
   redis==5.3.1 python-dotenv==1.1.1 pgvector==0.1.6 uvicorn==0.46.0
 
 # Pipeline
-pip install -r requirements.txt
+pip install -r requirements-pipeline.txt
 crawl4ai-setup
 python -m playwright install chromium
 ```
