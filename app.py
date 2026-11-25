@@ -15,3 +15,10 @@ if spec is None or spec.loader is None:
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 app = module.app
+
+# for cloudflare workers, for deployment
+try:
+    from workers import asgi
+    Default = asgi.entrypoint(app)
+except ImportError:
+    pass

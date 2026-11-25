@@ -1,0 +1,8 @@
+name = "newsaggregator"
+main = "app.py"
+compatibility_date = "2026-11-25"
+compatibility_flags = ["python_workers"]
+
+[assets]
+directory = "./frontend"
+binding = "ASSETS"
