@@ -4,9 +4,13 @@ services:
       context: .
       dockerfile: pipeline_automation/Dockerfile
     container_name: pipeline-scheduler
-    env_file: .env
     environment:
+      - DATABASE_PIPELINE=${DATABASE_PIPELINE}
       - OLLAMA_EMBED_URL=${OLLAMA_EMBED_URL_CONTAINER}
+      - LLM_URL=${LLM_URL}
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_MODEL=${LLM_MODEL}
+      - RETENTION_DAYS=${RETENTION_DAYS}
       - ORCHESTRATOR_CRON_SCHEDULE=0 0 * * *
       - RETENTION_CRON_SCHEDULE=0 0 * * *
     restart: unless-stopped

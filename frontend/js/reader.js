@@ -88,7 +88,7 @@ function readerPhotoHTML(a) {
   const size = layout === 'compact' ? ' small' : '';
   const src = safeUrl(a.image_url);
   return src
-    ? '<figure class="reader-photo' + size + '"><img src="' + esc(src) + '" alt="" referrerpolicy="no-referrer" onerror="this.closest(\'figure\').remove()"></figure>'
+    ? '<figure class="reader-photo' + size + '"><img src="' + esc(src) + '" alt="" referrerpolicy="no-referrer" data-fallback></figure>'
     : '<div class="reader-image' + size + '" style="background:' + catVar(a.category) + '">' + svgIcon(a.category) + '</div>';
 }
 function fillReader(card) {

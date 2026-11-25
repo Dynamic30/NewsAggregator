@@ -1,11 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from database_connetion import get_db
 from model import NewsArticle, StoryCluster
 from schema import ArticleDetail, ClusterInfo, ClusterSource, NewsCard
 from limits_decorator import cache, rate_limit
+
+MAX_ARTICLE_ID = 9223372036854775807
 
 router = APIRouter()
 
@@ -18,7 +21,10 @@ CARD_COLUMNS = (
 @router.get("/news_card/{article_id}", response_model=NewsCard)
 @rate_limit()
 @cache()
-async def news_card(request: Request,article_id: int = Path(ge=1), db: Session = Depends(get_db)):
+async def news_card(request: Request,article_id: int = Path(ge=1, le=MAX_ARTICLE_ID), db: Session = Depends(get_db)):
+    return await run_in_threadpool(_news_card, db, article_id)
+
+def _news_card(db, article_id):
     cluster = (
         select(StoryCluster.member_article_ids, StoryCluster.representative_article_id, StoryCluster.lean_summary)
         .where(StoryCluster.member_article_ids.contains([article_id]))

@@ -5,6 +5,7 @@ from bs4 import BeautifulSoup
 from curl_cffi.requests import AsyncSession
  
 DEFAULT_SOURCE = "Times of India"
+FETCH_TIMEOUT_SECONDS = 30
  
  
 def source_from_url(url: str) -> str:
@@ -19,7 +20,7 @@ async def fetch_toi(feed_path: str) -> list[dict]:
     url = f"https://timesofindia.indiatimes.com/{feed_path}"
  
     async with AsyncSession() as session:
-        resp = await session.get(url, impersonate="chrome110")
+        resp = await session.get(url, impersonate="chrome110", timeout=FETCH_TIMEOUT_SECONDS)
         resp.raise_for_status()
  
     soup = BeautifulSoup(resp.content, "xml")

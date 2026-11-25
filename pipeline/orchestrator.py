@@ -53,6 +53,7 @@ EMBEDDING_MARKDOWN_CHAR_LIMIT = 4000
 EMBEDDING_DESCRIPTION_CHAR_LIMIT = 1000
 EMBEDDING_WRITE_BATCH = 500
 EMBEDDING_CONCURRENCY = 4
+EMBED_TIMEOUT_SECONDS = 120
 
 Topics = {
     "National/India": {
@@ -346,7 +347,7 @@ async def run_extract(url):
 
 
 def run_enrich(text):
-    response = requests.post(OLLAMA_EMBED_URL, json={"model": EMBEDDING_MODEL, "input": text})
+    response = requests.post(OLLAMA_EMBED_URL, json={"model": EMBEDDING_MODEL, "input": text}, timeout=EMBED_TIMEOUT_SECONDS)
     response.raise_for_status()
     return response.json()["embeddings"][0]
 

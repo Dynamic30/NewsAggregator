@@ -5,6 +5,7 @@ from bs4 import BeautifulSoup
 from curl_cffi.requests import AsyncSession
  
 DEFAULT_SOURCE = "Business Standard"
+FETCH_TIMEOUT_SECONDS = 30
  
  
 def source_from_url(url: str) -> str:
@@ -29,7 +30,7 @@ async def fetch_business_standard(feed_path: str) -> list[dict]:
     url = f"https://www.business-standard.com/rss/{feed_path}"
  
     async with AsyncSession() as session:
-        resp = await session.get(url, impersonate="chrome110")
+        resp = await session.get(url, impersonate="chrome110", timeout=FETCH_TIMEOUT_SECONDS)
         resp.raise_for_status()
  
     soup = BeautifulSoup(resp.content, "xml")

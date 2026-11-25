@@ -5,7 +5,13 @@ backend
 frontend
 docker-compose*.yml
 *.md
-__pycache__
-*.pyc
+**/__pycache__
+**/*.pyc
+**/*.log
+test
+MCP
 .env
+.env.*
 .env.example
+*.pem
+*.key

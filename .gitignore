@@ -3,3 +3,14 @@
 __pycache__/
 *.log
 test/
+.env.*
+!.env.example
+.dev.vars
+.wrangler/
+*.pem
+*.key
+node_modules/
+.claude/
+.venv/
+*.bundle
+*.pyc

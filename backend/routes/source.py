@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from database_connetion import get_db
 from model import NewsArticle
@@ -14,6 +15,9 @@ router = APIRouter()
 @rate_limit()
 @cache()
 async def sources(request: Request,db: Session = Depends(get_db), min_stories: int = Query(3, ge=1, le=1000)):
+    return await run_in_threadpool(_sources, db, min_stories)
+
+def _sources(db, min_stories):
     average_score = func.avg(NewsArticle.political_lean_score)
     rows = db.execute(
         select(

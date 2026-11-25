@@ -107,7 +107,7 @@ Copy `.env.example` to `.env` and fill in the values. The file is in `.gitignore
 uvicorn app:app --reload
 ```
 
-Open http://127.0.0.1:8000. On startup the app runs `backend/database_schema.sql`, which creates the tables if they do not exist. Start the API once before the first pipeline run. Interactive API docs are at `/docs`.
+Open http://127.0.0.1:8000. On startup the app runs `backend/database_schema.sql`, which creates the tables if they do not exist. Start the API once before the first pipeline run.
 
 ### Run the pipeline
 
@@ -134,11 +134,4 @@ Top News opens first. Click a card to open the article page, where each outlet's
 
 - Lean scores are estimates from the article text, not facts, and they can be wrong.
 - Some articles cannot be extracted because of paywalls or bot protection, and those do not appear.
-
-## Deployment notes
-
-- `pyproject.toml` sets a Vercel entrypoint (`app:app`). There is no full deployment guide yet.
-- The API needs `DATABASE` and `REDIS_URL`, and no embedding or scoring service.
-- Set the pipeline variables from `.env.example` wherever the pipeline runs. For the container, `.env` is passed in with `env_file`.
-- There is no migration tool. Schema changes go in `backend/database_schema.sql`.
 

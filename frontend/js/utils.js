@@ -88,17 +88,22 @@ function plainText(s) {
 function safeUrl(u) { return /^https?:\/\//i.test(u || '') ? u : ''; }
 function mediaImg(a) {
   const src = safeUrl(a.image_url);
-  return src ? '<img class="media-img" src="' + esc(src) + '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">' : '';
+  return src ? '<img class="media-img" src="' + esc(src) + '" alt="" loading="lazy" referrerpolicy="no-referrer" data-fallback>' : '';
 }
+const SANITISE = { FORBID_TAGS: ['style', 'form', 'input', 'button', 'textarea', 'select', 'option'], FORBID_ATTR: ['style'] };
 function renderMarkdown(md) {
-  if (window.marked && window.DOMPurify) return DOMPurify.sanitize(marked.parse(md));
+  if (window.marked && window.DOMPurify) return DOMPurify.sanitize(marked.parse(md), SANITISE);
   return md.split(/\n{2,}/).filter(p => p.trim()).map(p => '<p>' + esc(p) + '</p>').join('');
 }
 if (window.DOMPurify) {
   DOMPurify.addHook('afterSanitizeAttributes', node => {
     if (node.tagName === 'A') { node.setAttribute('target', '_blank'); node.setAttribute('rel', 'noopener noreferrer'); }
+    if (node.tagName === 'IMG') { node.setAttribute('referrerpolicy', 'no-referrer'); node.setAttribute('loading', 'lazy'); }
   });
 }
+document.addEventListener('error', e => {
+  if (e.target.hasAttribute && e.target.hasAttribute('data-fallback')) (e.target.closest('figure') || e.target).remove();
+}, true);
 
 // 5 bands around 50: <30, 30-44, 45-55, 56-70, >70
 function scoreBucket(v) { return v < 30 ? 0 : v < 45 ? 1 : v <= 55 ? 2 : v <= 70 ? 3 : 4; }

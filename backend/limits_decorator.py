@@ -33,6 +33,14 @@ def cache(expire: int = 600):
         return wrapper
     return decorator
 
+INCR_WITH_TTL = redis_rate_limiter.register_script("""
+local current = redis.call('INCR', KEYS[1])
+if redis.call('TTL', KEYS[1]) < 0 then
+    redis.call('EXPIRE', KEYS[1], ARGV[1])
+end
+return current
+""")
+
 def rate_limit(max_requests: int = 120, window: int = 60):
     def decorator(func):
         @wraps(func)
@@ -45,11 +53,9 @@ def rate_limit(max_requests: int = 120, window: int = 60):
             key = f"rate:{func.__name__}:{identifier}"
 
             try:
-                current = await redis_rate_limiter.incr(key)
-                if current == 1:
-                    await redis_rate_limiter.expire(key, window)
+                current = await INCR_WITH_TTL(keys=[key], args=[window])
             except RedisError:
-                current = 0                      # redis down -> skip limiting, vercel firewall still applies
+                current = 0
 
             if current > max_requests:
                 raise HTTPException(

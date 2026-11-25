@@ -22,7 +22,24 @@ async def lifespan(app:FastAPI):
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
-app = FastAPI(title="News Aggregator", lifespan=lifespan)
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    "Strict-Transport-Security": "max-age=31536000",
+    "Content-Security-Policy": "frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'",
+}
+
+NOT_FOUND_HEADERS = {"Vary": "Accept", "Cache-Control": "no-store"}
+
+app = FastAPI(title="News Aggregator", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+
+
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers.update(SECURITY_HEADERS)
+    return response
 
 app.mount("/css", StaticFiles(directory=FRONTEND_DIR / "css"), name="css")
 app.mount("/js", StaticFiles(directory=FRONTEND_DIR / "js"), name="js")
@@ -69,5 +86,5 @@ def sources_page():
 @app.exception_handler(404)
 async def not_found(request, exc):
     if "text/html" in request.headers.get("accept", ""):          # browser opening a URL
-        return FileResponse(FRONTEND_DIR / "error.html", status_code=404)
-    return JSONResponse({"detail": exc.detail}, status_code=404)   # fetch() / API clients
+        return FileResponse(FRONTEND_DIR / "error.html", status_code=404, headers=NOT_FOUND_HEADERS)
+    return JSONResponse({"detail": exc.detail}, status_code=404, headers=NOT_FOUND_HEADERS)   # fetch() / API clients

@@ -39,7 +39,7 @@ async function loadMore(pager) {
 
   list.querySelectorAll('.sk-more').forEach(node => node.remove());
   pager.items = pager.items.concat(page);
-  pager.done = page.length < PAGE_SIZE;
+  pager.done = page.length < PAGE_SIZE || pager.items.length > MAX_OFFSET;
   if (first) list.innerHTML = page.length ? page.map(cardHTML).join('') : emptyNote(pager.emptyText);
   else list.insertAdjacentHTML('beforeend', page.map(cardHTML).join(''));
   more.innerHTML = pager.done ? '' : '<button class="load-more-btn" data-more>Load more</button>';

@@ -5,6 +5,7 @@ from bs4 import BeautifulSoup
 from curl_cffi.requests import AsyncSession
 from googlenewsdecoder import gnewsdecoder
 
+FETCH_TIMEOUT_SECONDS = 30
 DECODE_CONCURRENCY_LIMIT = 4
 DECODE_RETRY_DELAY_SECONDS = 2
 
@@ -27,7 +28,7 @@ async def fetch_google_news(topic: str, lang: str = "en", country: str = "IN") -
     url = f"https://news.google.com/rss/search?q={quote(topic)}&hl={hl}&gl={country}&ceid={ceid}"
 
     async with AsyncSession() as session:
-        resp = await session.get(url, impersonate="chrome110")
+        resp = await session.get(url, impersonate="chrome110", timeout=FETCH_TIMEOUT_SECONDS)
         resp.raise_for_status()
 
     soup = BeautifulSoup(resp.content, "xml")

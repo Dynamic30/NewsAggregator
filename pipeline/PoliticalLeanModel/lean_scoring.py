@@ -1,5 +1,6 @@
 import json
 import logging
+import math
 
 import ollama
 from dotenv import load_dotenv
@@ -19,6 +20,8 @@ client = ollama.Client(
 
 MAX_TEXT_CHARS_PER_ARTICLE = 3000
 TEXT_CHAR_BUDGET = 9000
+MAX_REASON_CHARS = 300
+MAX_SUMMARY_CHARS = 1000
 
 PARTIES = {
     "government": "the BJP-led NDA: the central government and every state government the NDA runs",
@@ -128,7 +131,7 @@ def build_messages(articles):
             label=label,
             title=title,
             description=description,
-            text=article["markdown"][:text_limit],
+            text=(article["markdown"] or description)[:text_limit],
         ))
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
@@ -136,14 +139,36 @@ def build_messages(articles):
     ]
     return messages, labels
 
+def clean_number(value, low, high):
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        return None
+    return max(low, min(high, value))
+
+def clean_text(value, limit):
+    return value[:limit] if isinstance(value, str) else None
+
+def clean_groups(groups):
+    groups = groups if isinstance(groups, dict) else {}
+    cleaned = {}
+    for party in PARTIES:
+        group = groups.get(party)
+        group = group if isinstance(group, dict) else {}
+        cleaned[party] = {
+            "score": clean_number(group.get("score"), 0, 100),
+            "reason": clean_text(group.get("reason"), MAX_REASON_CHARS),
+        }
+    return cleaned
+
 def stucture_output(raw, labels):
     # Turns the model's JSON into per-article results (keyed by article id) plus the cluster summary and representative
     scores = {}
     for item in raw["articles"]:
+        if not isinstance(item, dict) or not isinstance(item.get("label"), str):
+            continue
         article_id = labels.get(item["label"])
         if article_id is None:
             continue
-        groups = item["groups"]
+        groups = clean_groups(item.get("groups"))
         if not raw["is_political"]:
             groups = {party: {"score": None, "reason": None} for party in PARTIES}
         government = groups["government"]["score"]
@@ -161,7 +186,7 @@ def stucture_output(raw, labels):
 
         scores[article_id] = {
             "score": score,
-            "confidence": item["confidence"],
+            "confidence": clean_number(item.get("confidence"), 0, 1),
             "political_lean": political_lean,
             "breakdown": groups,
         }
@@ -172,7 +197,7 @@ def stucture_output(raw, labels):
     representative_article_id = min(scores, key=lambda article_id: abs(scores[article_id]["score"] - 50))
     return {
         "scores": scores,
-        "cluster_summary": raw["cluster_summary"],
+        "cluster_summary": clean_text(raw.get("cluster_summary"), MAX_SUMMARY_CHARS),
         "representative_article_id": representative_article_id,
     }
 

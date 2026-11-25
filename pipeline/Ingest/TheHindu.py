@@ -6,6 +6,7 @@ from curl_cffi.requests import AsyncSession
  
 # Fallback label when a link's domain can't be read, e.g. no link at all.
 DEFAULT_SOURCE = "The Hindu"
+FETCH_TIMEOUT_SECONDS = 30
  
  
 def source_from_url(url: str) -> str:
@@ -21,7 +22,7 @@ async def fetch_the_hindu(section: str) -> list[dict]:
     url = f"https://www.thehindu.com/{section}/feeder/default.rss"
  
     async with AsyncSession() as session:
-        resp = await session.get(url, impersonate="chrome110")
+        resp = await session.get(url, impersonate="chrome110", timeout=FETCH_TIMEOUT_SECONDS)
         resp.raise_for_status()
  
     soup = BeautifulSoup(resp.content, "xml")

@@ -5,6 +5,7 @@ from bs4 import BeautifulSoup
 from curl_cffi.requests import AsyncSession
  
 DEFAULT_SOURCE = "NDTV"
+FETCH_TIMEOUT_SECONDS = 30
  
  
 def source_from_url(url: str) -> str:
@@ -17,7 +18,7 @@ def source_from_url(url: str) -> str:
 async def fetch_ndtv(feed_url: str) -> list[dict]:
     """feed_url: full feedburner URL, e.g. 'https://feeds.feedburner.com/ndtvnews-india-news'."""
     async with AsyncSession() as session:
-        resp = await session.get(feed_url, impersonate="chrome110")
+        resp = await session.get(feed_url, impersonate="chrome110", timeout=FETCH_TIMEOUT_SECONDS)
         resp.raise_for_status()
  
     soup = BeautifulSoup(resp.content, "xml")

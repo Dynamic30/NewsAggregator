@@ -1,3 +1,4 @@
+const MAX_OFFSET = 500;
 const ARTICLE_PATH = '/news/';
 const PAGES = {home: '/', top: '/top-news', latest: '/latest-news', topics: '/topics', sources: '/source', topic: '/topic/'};
 
