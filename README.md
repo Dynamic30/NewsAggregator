@@ -14,9 +14,9 @@
 
 ## What it does
 
-SkimFeed collects Indian news from seven feeds: Google News, Times of India, NDTV, The Hindu, Mint, Business Standard and Economic Times. It groups articles about the same story across outlets into one cluster, so you see one card per story instead of one per outlet.
+SkimFeed collects Indian news from several news sources, and it groups articles about the same story across outlets into one cluster, so you see one card per story instead of one per outlet.
 
-For political stories, a language model scores how each outlet's article portrays the government and the opposition, and gives a short reason for each score. Every story card shows how many outlets covered it.
+For political stories, each outlet's article gets a score for how it portrays the government and the opposition, with a short reason. Every story card shows how many outlets covered it.
 
 ## Features
 
@@ -24,10 +24,6 @@ For political stories, a language model scores how each outlet's article portray
 - Latest News: every extracted article, newest first, loaded 30 at a time.
 - Topics: an overview of ten topics, plus a page per topic with a carousel and a full list.
 - Sources: each outlet's average lean score, a lean bar, and filter chips.
-- Article page: the story text, every outlet's version, a lean score per outlet, a "Why?" panel with the model's reasons, and a link to each original article.
-- Reader themes on the article page (light, sepia, dark) with a depth slider.
-- Light and dark site theme, and three card layouts (standard, classic, compact) in Settings.
-- Skeleton placeholders while data loads.
 
 ## How it works
 
@@ -37,12 +33,12 @@ RSS feeds -> extract -> embed -> cluster -> score -> Postgres -> FastAPI (+ Redi
 
 1. **Ingest.** `pipeline/Ingest/` reads one feed per outlet and topic. `orchestrator.py` saves new articles, skipping URLs it already has.
 2. **Extract.** `pipeline/Extract/` downloads each article with `curl_cffi` and pulls out the text with `trafilatura`. If a site serves a challenge page, it retries in a headless browser (crawl4ai/Playwright). Short texts are marked as paywalled.
-3. **Embed.** Title, description and the start of the text are sent to Ollama with the `nomic-embed-text` model. The 768-dimension vectors are stored in a pgvector column.
+3. **Embed.** Title, description and the start of the text are turned into embeddings and stored in a pgvector column.
 4. **Cluster.** `story_clustering.py` puts an article in an existing cluster of the same topic if the cosine distance to the cluster's representative is below 0.15. A cluster holds at most one article per outlet.
-5. **Score.** For clusters in political topics, an LLM reads the articles with outlet names hidden. It scores how each article portrays government, opposition, public and business from 0 to 100, with a reason for each. Sports, Entertainment and Markets/Stocks are not scored.
+5. **Score.** For clusters in political topics, the articles are scored with outlet names hidden. Each article gets a score from 0 to 100 for how it portrays government, opposition, public and business, with a reason for each. Sports, Entertainment and Markets/Stocks are not scored.
 6. **Serve.** A FastAPI app reads Postgres and serves the JSON API and the static frontend. Responses are cached in Redis, and requests are rate limited.
 
-Stack: FastAPI, SQLAlchemy, PostgreSQL with pgvector (Neon), Redis for cache and rate limit (Upstash), Ollama for embeddings, an Ollama-compatible chat API for scoring, and a vanilla JavaScript frontend with no build step.
+Stack: FastAPI, SQLAlchemy, PostgreSQL with pgvector, Redis for cache and rate limit, and a vanilla JavaScript frontend with no build step.
 
 ## Project structure
 
@@ -57,15 +53,18 @@ backend/
   database_connetion.py     Engine and schema setup on startup
   database_schema.sql       Tables, enums, indexes (run at startup)
 frontend/
-  index.html, newscard.html, error.html
+  index.html                Landing page
+  topnews.html, latestnews.html, topics.html, topic.html, sources.html
+                            One page per section
+  newscard.html, error.html Article page and error page
   logo.svg                  Logo
   css/                      base, views, error styles
-  js/                       api, app, news, newscard, reader, sources, shell, utils
+  js/                       Shared (config, utils, api, chrome, shell) and one script per page
 pipeline/
   orchestrator.py           Runs ingest, extract, embed, cluster, score
   Ingest/                   One module per outlet
   Extract/                  Page download and text extraction
-  PoliticalLeanModel/       LLM prompt and score calculation
+  PoliticalLeanModel/       Scoring prompt and score calculation
   story_clustering.py       Clustering by embedding distance
   delete_old_articles.py    Retention clean-up
 pipeline_automation/        Dockerfile and cron entrypoint for the pipeline
@@ -77,10 +76,10 @@ docker-compose.pipeline.yml Runs the pipeline on a schedule
 ### Prerequisites
 
 - Python 3.12 or newer (`requires-python` in `pyproject.toml`).
-- A PostgreSQL database with the `vector` extension (Neon works).
+- A PostgreSQL database with the `vector` extension.
 - A Redis instance reachable by URL.
-- An Ollama server with `nomic-embed-text` pulled, for embeddings.
-- An Ollama-compatible chat endpoint and model for lean scoring (optional; scoring is skipped if `LLM_MODEL` is empty).
+- A text-embedding service for the embed step.
+- A scoring service for the lean scores (optional; scoring is skipped if `LLM_MODEL` is empty).
 - Docker, only if you want to run the pipeline in a container.
 
 ### Install
@@ -100,19 +99,7 @@ python -m playwright install chromium
 
 ### Configure
 
-Copy `.env.example` to `.env` and fill it in. The file is in `.gitignore`.
-
-| Variable | Used by | Purpose | Example |
-| --- | --- | --- | --- |
-| `DATABASE` | API | Postgres connection URL | `postgresql://user:pass@host/db` |
-| `DATABASE_PIPELINE` | Pipeline | Postgres URL for the pipeline (same database). Not listed in `.env.example`, but the code reads it. | `postgresql://user:pass@host/db` |
-| `REDIS_URL` | API | Redis URL for cache and rate limit | `rediss://default:pass@host:6379` |
-| `OLLAMA_EMBED_URL` | Pipeline | Ollama embed endpoint | `http://localhost:11434/api/embed` |
-| `OLLAMA_EMBED_URL_CONTAINER` | Docker | Same endpoint as seen from inside the container | `http://host.docker.internal:11434/api/embed` |
-| `RETENTION_DAYS` | Pipeline | Days to keep articles (30 if empty) | `30` |
-| `LLM_URL` | Pipeline | Base URL of the Ollama-compatible chat API | `http://localhost:11434` |
-| `LLM_API_KEY` | Pipeline | Bearer token, if the endpoint needs one | `your-api-key` |
-| `LLM_MODEL` | Pipeline | Model used for lean scoring | `your-model-name` |
+Copy `.env.example` to `.env` and fill in the values. The file is in `.gitignore`.
 
 ### Run the API and frontend
 
@@ -129,7 +116,7 @@ cd pipeline
 python orchestrator.py
 ```
 
-It processes topics in batches of five and prints progress to the console. Without Docker, run it yourself or from your own scheduler.
+It processes topics in batches of five and logs progress to the console and to `pipeline.log`. Without Docker, run it yourself or from your own scheduler.
 
 To run it on a schedule in Docker:
 
@@ -141,39 +128,17 @@ The container runs `orchestrator.py` and `delete_old_articles.py` through cron, 
 
 ### Using the app
 
-Top News opens first. Click a card to open the article page, where each outlet's version is listed with its lean score. "Why?" shows the model's reasons per group, and the link icon opens the original article. Use Topics to browse by section, Sources to see outlet averages, and the gear icon for theme and layout.
-
-## API reference
-
-| Method | Path | Parameters | Returns |
-| --- | --- | --- | --- |
-| GET | `/top_news` | `limit` (default 10, max 50), `offset` | Recent story cards ordered by outlet count |
-| GET | `/latest_news` | `limit` (default 30, max 100), `offset` | Articles with extracted text, newest first |
-| GET | `/news/topic/{topic}` | `limit` (30, max 100), `offset` | One card per story in a topic; 404 for an unknown topic |
-| GET | `/news/all_topics` | none | Up to 3 latest stories for each topic |
-| GET | `/news_card/{article_id}` | none | The article, its cluster summary, and each outlet's score, reasons and URL |
-| GET | `/sources` | `min_stories` (default 3) | Per outlet: name, story count, average lean score |
-
-List items have `id`, `title`, `description`, `source`, `topic`, `published_at`, `image_url`, `political_lean_score` and `source_count`. A lean score runs from 0 to 100: below 50 is closer to the opposition, above 50 closer to the government. The pages are served at `/` and `/news/{article_id}`.
-
-## Caching and rate limiting
-
-Every API endpoint is cached in Redis for 600 seconds, keyed by the endpoint and its parameters. Every endpoint is also limited to 120 requests per 60 seconds per client (by IP address), and the next request gets HTTP 429. If Redis is unreachable, the cache is skipped and the limit is not applied (`backend/limits_decorator.py`).
-
-## Data retention
-
-`pipeline/delete_old_articles.py` deletes articles whose ingest time is older than `RETENTION_DAYS` (30 if unset), along with clusters whose representative article is among them. The Docker setup runs it daily.
-
-## Deployment notes
-
-- `pyproject.toml` sets a Vercel entrypoint (`app:app`), and a comment in the rate limiter mentions the Vercel firewall. I have not documented a full deployment beyond that.
-- Set `DATABASE` and `REDIS_URL` for the API. The API needs no Ollama access.
-- Set the pipeline variables from the table above wherever the pipeline runs. For the container, `.env` is passed in with `env_file`.
-- There is no migration tool. Schema changes go in `backend/database_schema.sql`.
+Top News opens first. Click a card to open the article page, where each outlet's version is listed with its lean score. "Why?" shows the reasons per group, and the link icon opens the original article. Use Topics to browse by section, Sources to see outlet averages, and the gear icon for theme and layout.
 
 ## Limitations
 
-- Lean scores are model estimates from article text, not facts. The model can be wrong. "Government" means the BJP-led NDA and the state governments it runs.
-- Coverage is limited to seven feeds and ten topics. The region setting is India only.
+- Lean scores are estimates from the article text, not facts, and they can be wrong.
 - Some articles cannot be extracted because of paywalls or bot protection, and those do not appear.
-- There are no automated tests, screenshots or license file in the repository yet.
+
+## Deployment notes
+
+- `pyproject.toml` sets a Vercel entrypoint (`app:app`). There is no full deployment guide yet.
+- The API needs `DATABASE` and `REDIS_URL`, and no embedding or scoring service.
+- Set the pipeline variables from `.env.example` wherever the pipeline runs. For the container, `.env` is passed in with `env_file`.
+- There is no migration tool. Schema changes go in `backend/database_schema.sql`.
+
