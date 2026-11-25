@@ -90,7 +90,11 @@ function mediaImg(a) {
   const src = safeUrl(a.image_url);
   return src ? '<img class="media-img" src="' + esc(src) + '" alt="" loading="lazy" referrerpolicy="no-referrer" data-fallback>' : '';
 }
-const SANITISE = { FORBID_TAGS: ['style', 'form', 'input', 'button', 'textarea', 'select', 'option'], FORBID_ATTR: ['style'] };
+const SANITISE = {
+  FORBID_TAGS: ['style', 'form', 'input', 'button', 'textarea', 'select', 'option', 'svg', 'math', 'video', 'audio', 'source', 'picture'],
+  FORBID_ATTR: ['style', 'class', 'id', 'name'],
+  ALLOW_DATA_ATTR: false
+};
 function renderMarkdown(md) {
   if (window.marked && window.DOMPurify) return DOMPurify.sanitize(marked.parse(md), SANITISE);
   return md.split(/\n{2,}/).filter(p => p.trim()).map(p => '<p>' + esc(p) + '</p>').join('');
