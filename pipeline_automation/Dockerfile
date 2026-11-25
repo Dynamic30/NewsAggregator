@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY requirements.txt .
+COPY requirements-pipeline.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 RUN crawl4ai-setup
 RUN python -m playwright install --with-deps chromium
